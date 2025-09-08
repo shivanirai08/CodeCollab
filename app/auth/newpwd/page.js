@@ -5,41 +5,46 @@ import { supabase } from "@/lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { toast } from "sonner"
 
 export default function NewPwdPage() {
   const [password, setPassword] = useState("")
+  const [error, setError] = useState({pwd:false , confirmpwd: false})
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [error, setError] = useState(null)
-  const [message, setMessage] = useState("")
   const router = useRouter()
 
   const handleNewPassword = async (e) => {
     e.preventDefault()
-    setError(null)
-    setMessage("")
-    if (!password || !confirmPassword) {
-      setError("Please fill in both password fields.")
+    if(!password){
+      setError({pwd:true , confirmpwd: false})
+      toast.error("Password is required.")
+      return
+    }
+    if(!confirmPassword){
+      setError({pwd:false , confirmpwd: true})
+      toast.error("Confirm Password is required.")
       return
     }
     if (password !== confirmPassword) {
-      setError("Passwords do not match.")
+      setError({pwd:true , confirmpwd: true})
+      toast.error("Passwords do not match.")
       return
     }
     // Update password using Supabase
     const { error } = await supabase.auth.updateUser({ password })
-    if (error) setError(error.message)
+    if (error) toast.error(error.message)
     else {
-      setMessage("Password updated successfully. Redirecting to login...")
+      toast.success("Password updated successfully. Redirecting to login...")
       setTimeout(() => {
         router.push("/auth/login")
-      }, 2000)
+      }, 1000)
     }
   }
 
   return (
-    <div className="relative flex items-center justify-center min-h-screen px-4 bg-gradient-to-b from-background via-background to-black">
+    <div className="relative flex items-center justify-center min-h-screen px-4 bg-gradient-to-b from-background via-background to-[rgba(32,31,44,0.2)]">
       {/* Subtle background glow */}
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.15),transparent_70%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(81, 246, 59, 1),rgba(19, 89, 10, 1))]" />
 
       <form
         onSubmit={handleNewPassword}
@@ -54,13 +59,10 @@ export default function NewPwdPage() {
         {/* Top glow bar */}
         <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent blur-sm" />
 
-        {/* Gradient sheen overlay */}
-        <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-white/5 to-transparent opacity-30 pointer-events-none" />
-
         {/* Content */}
         <div className="relative text-center space-y-1">
-          <div className="mx-auto size-12 rounded-2xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
-            <div className="size-6 rounded-full bg-primary/60" />
+          <div className="mx-auto size-12 rounded-xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
+            <img src="/logo.svg" alt="Logo" className="size-6" />
           </div>
           <h2 className="text-3xl font-semibold text-white">Set a new password</h2>
           <p className="text-sm text-gray-400">Enter and confirm your new password.</p>
@@ -73,8 +75,9 @@ export default function NewPwdPage() {
               placeholder="••••••••"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 bg-white/10 border-white/20 placeholder:text-gray-500 text-white"
+              onChange={(e) => {setPassword(e.target.value); setError({...error, pwd: false})}}
+              className="mt-1 bg-white/5 border-white/20 placeholder:text-gray-500 text-white"
+              aria-invalid={error.pwd}
             />
           </div>
           <div className="text-left">
@@ -83,14 +86,12 @@ export default function NewPwdPage() {
               placeholder="••••••••"
               type="password"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="mt-1 bg-white/10 border-white/20 placeholder:text-gray-500 text-white"
+              onChange={(e) => {setConfirmPassword(e.target.value); setError({...error, confirmpwd: false})}}
+              className="mt-1 bg-white/5 border-white/20 placeholder:text-gray-500 text-white"
+              ariala-invalid={error.confirmpwd}
             />
           </div>
         </div>
-
-        {error && <p className="text-red-400 text-sm">{error}</p>}
-        {message && <p className="text-emerald-300 text-sm">{message}</p>}
 
         <Button
           type="submit"
@@ -101,7 +102,7 @@ export default function NewPwdPage() {
 
         <p className="text-center text-sm text-gray-400">
           Remembered your password?{" "}
-          <Button variant="link" className="hover:text-white" href="/auth/login">
+          <Button variant="link" className="hover:text-white" onClick = {() => {router.push("/auth/login")}}>
             Sign in
           </Button>
         </p>

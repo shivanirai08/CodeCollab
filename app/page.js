@@ -4,11 +4,12 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Github } from "lucide-react";
 import { AnimatedBg } from "@/components/ui/AnimatedBg";
+import { useRouter } from "next/navigation"
 
 //NAVBAR
 function Navbar() {
+  const router = useRouter()
   return (
     <nav className="fixed top-0 left-0 w-full z-50 backdrop-blur-xl bg-background/60 border-b border-border/40 px-2 md:px-12">
       <div className="container mx-auto flex justify-between items-center px-6 py-4">
@@ -19,7 +20,7 @@ function Navbar() {
           <Button variant="ghost" className="hover:bg-primary/10">Home</Button>
           <Button variant="ghost" className="hover:bg-primary/10">Features</Button>
           <Button variant="ghost" className="hover:bg-primary/10">About</Button>
-          <Button variant="default" className="ml-2 shadow-md hover:shadow-primary/30 cursor-pointer">Get Started</Button>
+          <Button variant="default" className="ml-2 shadow-md  cursor-pointer" onClick = {() => {router.push("/auth/signup")}}>Get Started</Button>
         </div>
       </div>
     </nav>
@@ -28,6 +29,7 @@ function Navbar() {
 
 //HERO SECTION
 function Hero() {
+  const router = useRouter()
   return (
     <section className="relative flex flex-col items-center justify-center min-h-screen text-center">
       <div className="absolute inset-0 pointer-events-none select-none [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_80%)]" />
@@ -54,10 +56,11 @@ function Hero() {
         animate={{ opacity: 1 }}
         transition={{ delay: 0.4 }}
       >
-        <Button size="lg" className="px-7 shadow-lg hover:shadow-primary/30 cursor-pointer">
+        
+        <Button size="lg" className="px-7 shadow-lg cursor-pointer" onClick = {() => {router.push("/auth/signup")}}>
           Start Coding
         </Button>
-        <Button size="lg" variant="outline" className="px-7 border-border/60 hover:bg-background/60 cursor-pointer">
+        <Button size="lg" variant="outline" className="px-7 border-border/60 cursor-pointer">
           Explore More
         </Button>
       </motion.div>

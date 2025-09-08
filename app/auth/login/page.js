@@ -1,59 +1,95 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabaseClient"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { AnimatedBg } from "@/components/ui/AnimatedBg"
-import { FcGoogle } from "react-icons/fc"
-
+import { useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { FcGoogle } from "react-icons/fc";
+import { EyeClosed, Eye } from "lucide-react";
+import { useDispatch } from "react-redux";
+import { setUser } from "@/store/authSlice";
+import Cookies from "js-cookie";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [rememberMe, setRememberMe] = useState(false)
-  const [error, setError] = useState(null)
-  const [message, setMessage] = useState("")
-  const router = useRouter()
-
-  useEffect(() => {
-    const remembered = localStorage.getItem("remember_email")
-    if (remembered) {
-      setEmail(remembered)
-      setRememberMe(true)
-    }
-  }, [])
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState({ email: false, password: false });
+  const [rememberMe, setRememberMe] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const router = useRouter();
+  const dispatch = useDispatch();
 
   const handleLogin = async (e) => {
-    e.preventDefault()
-    const { error } = await supabase.auth.signInWithPassword({
+    e.preventDefault();
+    if (!email || email.trim() === "" || email.includes(" ")) {
+      setError({ email: true });
+      toast.error("Email is required.");
+      return;
+    }
+    if (!password || password.trim() === "") {
+      setError({ password: true });
+      toast.error("Password is required.");
+      return;
+    }
+    setLoading(true);
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
-    })
-    if (error) setError(error.message)
-    else {
-      if (rememberMe) localStorage.setItem("remember_email", email)
-      else localStorage.removeItem("remember_email")
-      router.push("/dashboard")
+    });
+    const res = await fetch("/api/checkuser", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const { exists } = await res.json();
+    if (!exists) {
+      toast.error("No user found with this email. Please sign up first.");
+      setError({ email: true, password: false });
+      setLoading(false);
+      return;
     }
-  }
+    if (exists && error) {
+      toast.error("Wrong password. Please try again.");
+      setError({ email: false, password: true });
+      setLoading(false);
+      return;
+    } else {
+      setLoading(false);
+      toast.success("Logged in successfully!");
+      const user = {
+    email: data.user.email,
+    id: data.user.id,
+    token: data.session.access_token,
+  };
+  await supabase.from("users").insert({
+  id: data.user.id,
+  email: data.user.email,
+  });
+  Cookies.set("sb-access-token", user.token, { secure: true, sameSite: "strict" });
+  dispatch(setUser(user));
+
+      router.push("/dashboard");
+    }
+  };
 
   const handleGoogleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: "http://localhost:3000/dashboard" },
-    })
-  }
+    await supabase.auth
+      .signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}/auth/callback` },
+      });
+  };
 
   const handleResetPassword = () => {
-    router.push("/auth/resetpwd")
-  }
+    router.push(`/auth/resetpwd?email=${encodeURIComponent(email)}`);
+  };
 
   return (
-      <div className="relative flex items-center justify-center min-h-screen px-4 bg-gradient-to-b from-background via-background to-black">
-        {/* <AnimatedBg /> */}
-      {/* Glow particles background (optional subtle effect) */}
+    <div className="relative flex items-center justify-center min-h-screen px-4 bg-gradient-to-b from-background via-background to-[rgba(32,31,44,0.2)]">
+      {/* Subtle background glow */}
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.15),transparent_70%)]" />
 
       <form
@@ -65,21 +101,19 @@ export default function LoginPage() {
           shadow-[0_0_30px_rgba(0,0,0,0.5)]
           overflow-hidden px-6 py-8 space-y-5
           "
-        //   border border-cyan-400/10 shadow-[0_0_40px_5px_rgba(0,255,255,0.3)] pointer-events-none
       >
         {/* Top glow bar */}
         <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent blur-sm" />
 
-        {/* Gradient sheen overlay */}
-        <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-white/5 to-transparent opacity-30 pointer-events-none" />
-
         {/* Content */}
         <div className="relative text-center space-y-1">
-          <div className="mx-auto size-12 rounded-2xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
-            <div className="size-6 rounded-full bg-primary/60" />
+          <div className="mx-auto size-12 rounded-xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
+            <img src="/logo.svg" alt="Logo" className="size-6" />
           </div>
           <h2 className="text-3xl font-semibold text-white">Welcome back</h2>
-          <p className="text-sm text-gray-400">Please enter your details to sign in.</p>
+          <p className="text-sm text-gray-400">
+            Please enter your details to sign in.
+          </p>
         </div>
 
         <div className="relative space-y-3">
@@ -89,19 +123,40 @@ export default function LoginPage() {
               placeholder="you@example.com"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 bg-white/10 border-white/20 placeholder:text-gray-500 text-white"
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (error.email)
+                  setError((prev) => ({ ...prev, email: false }));
+              }}
+              className="mt-1 bg-white/5 border-white/20 placeholder:text-gray-500 text-white"
+              aria-invalid={error.email}
             />
           </div>
-          <div className="text-left">
+          <div className="text-left relative">
             <label className="text-sm text-gray-400">Password</label>
             <Input
               placeholder="••••••••"
-              type="password"
+              type={visible ? "text" : "password"}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 bg-white/10 border-white/20 placeholder:text-gray-500 text-white"
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (error.password)
+                  setError((prev) => ({ ...prev, password: false }));
+              }}
+              className="mt-1 bg-white/5 border-white/20 placeholder:text-gray-500 text-white"
+              aria-invalid={error.password}
             />
+            {visible ? (
+              <Eye
+                className="size-5 text-gray-400 absolute right-3 top-[38px] cursor-pointer"
+                onClick={() => setVisible(false)}
+              />
+            ) : (
+              <EyeClosed
+                className="size-5 text-gray-400 absolute right-3 top-[38px] cursor-pointer"
+                onClick={() => setVisible(true)}
+              />
+            )}
           </div>
           <div className="flex items-center justify-between pt-1">
             <label className="inline-flex items-center gap-2 text-sm text-gray-400">
@@ -109,32 +164,31 @@ export default function LoginPage() {
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="size-4 rounded border-white/20 bg-white/5"
+                className="size-4 rounded border-white/20 bg-white/5 checked:bg-purple-500"
               />
               Remember me
             </label>
             <Button
+              type="button"
               variant="link"
               onClick={handleResetPassword}
               className="text-sm text-gray-300 hover:text-white"
             >
-              Reset password
+              Forgot password?
             </Button>
           </div>
         </div>
 
-        {error && <p className="text-red-400 text-sm">{error}</p>}
-        {message && <p className="text-emerald-300 text-sm">{message}</p>}
-
-        <Button
-          className="w-full h-11 shadow-lg"
-        >
-          Sign in
+        <Button className="w-full h-11 shadow-lg">
+          {loading ? "Signing in..." : "Sign in"}
         </Button>
 
-        <div className="relative text-center">
-          <span className="absolute left-0 right-0 top-1/2 -z-10 h-px bg-white/10" />
-          <span className="bg-background/60 px-3 text-xs text-gray-400">OR</span>
+        <div className="relative flex items-center justify-center">
+          <span className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          <span className="relative z-10 mx-3 rounded-full px-3 py-0.5 text-xs text-gray-300">
+            OR
+          </span>
+          <span className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
         </div>
 
         <Button
@@ -143,16 +197,24 @@ export default function LoginPage() {
           onClick={handleGoogleLogin}
           className="w-full h-11 border-white/20 hover:bg-white/10 text-white"
         >
-          <FcGoogle className="size-5" />Continue with Google
+          <FcGoogle className="size-5" />
+          Continue with Google
         </Button>
 
         <p className="text-center text-sm text-gray-400">
           Don't have an account?{" "}
-          <Button variant="link" className="hover:text-white" href="/auth/signup">
+          <Button
+            type="button"
+            variant="link"
+            className="hover:text-white"
+            onClick={() => {
+              router.push("/auth/signup");
+            }}
+          >
             Create Account
           </Button>
         </p>
       </form>
     </div>
-  )
+  );
 }

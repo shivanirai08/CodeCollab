@@ -3,9 +3,11 @@
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
+import { Input } from "@/components/ui/input"
+import { supabase } from "@/lib/supabaseClient"
 
 export default function VerifyOtpPage() {
-  const [otp, setOtp] = useState(["", "", "", ""])
+  const [otp, setOtp] = useState(["", "", "", "", "", ""])
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
   const [loading, setLoading] = useState(false)
@@ -14,7 +16,6 @@ export default function VerifyOtpPage() {
   const router = useRouter()
 
   useEffect(() => {
-    // Get email from localStorage or URL params (you can modify this based on your flow)
     const storedEmail = localStorage.getItem("signup_email")
     if (storedEmail) {
       setEmail(storedEmail)
@@ -22,14 +23,13 @@ export default function VerifyOtpPage() {
   }, [])
 
   const handleOtpChange = (index, value) => {
-    if (value.length > 1) return // Prevent multiple characters
+    if (value.length > 1) return
     
     const newOtp = [...otp]
     newOtp[index] = value
     setOtp(newOtp)
 
-    // Auto-focus next input
-    if (value && index < 3) {
+    if (value && index < 5) {
       inputRefs.current[index + 1]?.focus()
     }
   }
@@ -42,51 +42,55 @@ export default function VerifyOtpPage() {
 
   const handlePaste = (e) => {
     e.preventDefault()
-    const pastedData = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4)
+    const pastedData = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)
     const newOtp = [...otp]
-    for (let i = 0; i < pastedData.length && i < 4; i++) {
+    for (let i = 0; i < pastedData.length && i < 6; i++) {
       newOtp[i] = pastedData[i]
     }
     setOtp(newOtp)
     
     // Focus the next empty input or the last one
-    const nextIndex = Math.min(pastedData.length, 3)
+    const nextIndex = Math.min(pastedData.length, 5)
     inputRefs.current[nextIndex]?.focus()
   }
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError("")
-    setMessage("")
-    setLoading(true)
-    
-    const otpString = otp.join("")
-    
-    try {
-      // Replace with your OTP verification logic
-      if (otpString.length !== 4) {
-        setError("Please enter a valid 4-digit OTP.")
-      } else {
-        await new Promise((res) => setTimeout(res, 1000))
-        setMessage("OTP verified successfully!")
-        // Redirect to dashboard or next step
-        setTimeout(() => {
-          router.push("/dashboard")
-        }, 1500)
-      }
-    } catch (err) {
-      setError("Failed to verify OTP. Please try again.")
-    } finally {
-      setLoading(false)
+  e.preventDefault()
+  setError("")
+  setMessage("")
+  setLoading(true)
+  const otpString = otp.join("")
+  try {
+    if (otpString.length !== 6) {
+      setError("Please enter a valid 6-digit OTP.")
+      return
     }
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token: otpString,
+      type: "email",
+    })
+    if (error) {
+      setError("Failed to verify OTP. Please try again.")
+    } else {
+      setMessage("OTP verified successfully!")
+      setTimeout(() => {
+        router.push("/dashboard")
+      }, 1500)
+    }
+  } catch (err) {
+    setError("Failed to verify OTP. Please try again.")
+  } finally {
+    setLoading(false)
   }
+}
 
   const handleBackToSignup = () => {
     router.push("/auth/signup")
   }
 
   return (
-    <div className="relative flex items-center justify-center min-h-screen px-4 bg-gradient-to-b from-background via-background to-black">
+    <div className="relative flex items-center justify-center min-h-screen px-4 bg-gradient-to-b from-background via-background to-[rgba(32,31,44,0.2)]">
       {/* Subtle background glow */}
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.15),transparent_70%)]" />
 
@@ -103,31 +107,14 @@ export default function VerifyOtpPage() {
         {/* Top glow bar */}
         <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent blur-sm" />
 
-        {/* Gradient sheen overlay */}
-        <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-white/5 to-transparent opacity-30 pointer-events-none" />
-
-        {/* Back button */}
-        <div className="relative">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleBackToSignup}
-            className="absolute left-0 top-0 p-2 text-gray-400 hover:text-white hover:bg-white/10"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </Button>
-        </div>
-
         {/* Content */}
         <div className="relative text-center space-y-1">
-          <div className="mx-auto size-12 rounded-2xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
-            <div className="size-6 rounded-full bg-primary/60" />
+          <div className="mx-auto size-12 rounded-xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
+            <img src="/logo.svg" alt="Logo" className="size-6" />
           </div>
           <h2 className="text-3xl font-semibold text-white">Verify your account</h2>
           <p className="text-sm text-gray-400">
-            Enter the 4-digit code sent to your email.
+            Enter the 6-digit code sent to your email.
           </p>
           {email && (
             <p className="text-sm text-cyan-400 font-medium">
@@ -137,9 +124,9 @@ export default function VerifyOtpPage() {
         </div>
 
         {/* OTP Input Boxes */}
-          <div className="flex justify-center gap-8">
+          <div className="flex justify-center gap-4">
             {otp.map((digit, index) => (
-              <input
+              <Input
                 key={index}
                 ref={(el) => (inputRefs.current[index] = el)}
                 type="text"
@@ -152,7 +139,7 @@ export default function VerifyOtpPage() {
                 className="
                   w-12 h-12 text-center text-xl font-semibold
                   rounded-md border border-white/20 bg-white/10
-                  text-white focus:outline-none focus:ring-1 
+                  text-white focus:outline-none
                  transition-all duration-200
                 "
                 autoComplete="off"
@@ -166,7 +153,7 @@ export default function VerifyOtpPage() {
         <Button
           type="submit"
           className="w-full h-11 shadow-lg"
-          disabled={loading || otp.join("").length !== 4}
+          disabled={loading || otp.join("").length !== 6}
         >
           {loading ? "Verifying..." : "Verify Code"}
         </Button>
