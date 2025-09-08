@@ -61,31 +61,33 @@ export default function LoginPage() {
       setLoading(false);
       toast.success("Logged in successfully!");
       const user = {
-    email: data.user.email,
-    id: data.user.id,
-    token: data.session.access_token,
-  };
-  await supabase.from("users").insert({
-  id: data.user.id,
-  email: data.user.email,
-  });
-  Cookies.set("sb-access-token", user.token, { secure: true, sameSite: "strict" });
-  dispatch(setUser(user));
-
+        email: data.user.email,
+        id: data.user.id,
+        token: data.session.access_token,
+      };
+      await supabase.from("users").insert({
+        id: data.user.id,
+        email: data.user.email,
+      });
+      Cookies.set("sb-access-token", user.token, {
+        secure: true,
+        sameSite: "strict",
+      });
+      dispatch(setUser(user));
+      localStorage.setItem("email", email);
       router.push("/dashboard");
     }
   };
 
   const handleGoogleLogin = async () => {
-    await supabase.auth
-      .signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
-      });
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
   };
 
   const handleResetPassword = () => {
-    router.push(`/auth/resetpwd?email=${encodeURIComponent(email)}`);
+    router.push(`/auth/resetpwd`);
   };
 
   return (
@@ -109,7 +111,13 @@ export default function LoginPage() {
         {/* Content */}
         <div className="relative text-center space-y-1">
           <div className="mx-auto size-12 rounded-xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
-            <Image src="/logo.svg" alt="Logo"  width={24} height={24} className="size-6" />
+            <Image
+              src="/logo.svg"
+              alt="Logo"
+              width={24}
+              height={24}
+              className="size-6"
+            />
           </div>
           <h2 className="text-3xl font-semibold text-white">Welcome back</h2>
           <p className="text-sm text-gray-400">

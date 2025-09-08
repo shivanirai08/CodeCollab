@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabaseClient"
 import { toast } from "sonner"
@@ -10,11 +10,10 @@ import Image from "next/image";
 export default function VerifyMailPage() {
   const [resendTimer, setResendTimer] = useState(30)
   const [resending, setResending] = useState(false)
-  const searchParams = useSearchParams()
   const router = useRouter()
 
   //email from signup page
-  const email = searchParams.get("email")
+  const email = localStorage.getItem("email")
 
   useEffect(() => {
     let timer

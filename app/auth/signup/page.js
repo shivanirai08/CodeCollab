@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FcGoogle } from "react-icons/fc";
@@ -25,15 +25,8 @@ export default function SignupPage() {
   const [hasNumber, setHasNumber] = useState(false);
   const [hasSpecial, setHasSpecial] = useState(false);
   const [hasMinLength, setHasMinLength] = useState(false);
-  const searchParams = useSearchParams();
   const router = useRouter();
 
-  // back from verifymail page
-  useEffect(() => {
-    if (searchParams.get("email")) {
-      setEmail(searchParams.get("email"));
-    }
-  }, [searchParams]);
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -83,7 +76,8 @@ export default function SignupPage() {
       return;
     } else {
       toast.success("Signup successful! Please verify your email.");
-      router.push(`/auth/verifymail?email=${encodeURIComponent(email)}`);
+      localStorage.setItem("email", email);
+      router.push(`/auth/verifymail`);
       setLoading(false);
       await supabase.from("users").insert({
       id: data.user.id,

@@ -4,20 +4,20 @@ import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useSearchParams, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import Image from "next/image";
 
 export default function ResetPwd() {
   const [email, setEmail] = useState("")
   const router = useRouter()
-  const searchParams = useSearchParams()
-   
-  useEffect(()=>{
-    if (searchParams.get("email")) {
-    setEmail(searchParams.get("email"))
-  }
-  }, [searchParams])
+
+  useEffect(() => {
+    const email = localStorage.getItem("email")
+    if (email) {
+      setEmail(email)
+    }
+  }, [])
 
   const handleResetPassword = async (e) => {
     e.preventDefault()
