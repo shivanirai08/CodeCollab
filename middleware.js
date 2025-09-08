@@ -2,11 +2,19 @@ import { NextResponse } from "next/server";
 
 export function middleware(req) {
   const token = req.cookies.get("sb-access-token")?.value; 
-  // supabase sets this cookie automatically if you enabled it
-  // OR you can sync redux/localStorage user into cookie manually
 
-  const { pathname } = req.nextUrl;
+  const { pathname, searchParams } = req.nextUrl;
 
+  // Restrict /auth/newpwd
+  if (pathname.startsWith("/auth/newpwd")) {
+    const resetToken = searchParams.get("token");
+
+    // If no token in URL → redirect back to reset password request page
+    if (!resetToken) {
+      return NextResponse.redirect(new URL("/auth/resetpwd", req.url));
+    }
+  }
+  
   // Public pages
   if (
     pathname.startsWith("/auth") ||

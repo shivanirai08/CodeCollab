@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import Image from "next/image";
 import { toast } from "sonner";
 import { FcGoogle } from "react-icons/fc";
 import { EyeClosed, Eye } from "lucide-react";
@@ -108,7 +109,7 @@ export default function LoginPage() {
         {/* Content */}
         <div className="relative text-center space-y-1">
           <div className="mx-auto size-12 rounded-xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
-            <img src="/logo.svg" alt="Logo" className="size-6" />
+            <Image src="/logo.svg" alt="Logo"  width={24} height={24} className="size-6" />
           </div>
           <h2 className="text-3xl font-semibold text-white">Welcome back</h2>
           <p className="text-sm text-gray-400">
@@ -202,7 +203,7 @@ export default function LoginPage() {
         </Button>
 
         <p className="text-center text-sm text-gray-400">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <Button
             type="button"
             variant="link"

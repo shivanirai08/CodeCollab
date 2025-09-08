@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { FcGoogle } from "react-icons/fc";
 import { toast } from "sonner";
 import { EyeClosed, Eye, Info } from "lucide-react";
+import Image from "next/image";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
@@ -120,7 +121,7 @@ export default function SignupPage() {
         {/* Card content */}
         <div className="relative text-center space-y-1">
           <div className="mx-auto size-12 rounded-xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
-            <img src="/logo.svg" alt="Logo" className="size-6" />
+            <Image src="/logo.svg" alt="Logo"  width={24} height={24} className="size-6" />
           </div>
           <h2 className="text-3xl font-semibold text-white">
             Create your account

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
+import Image from "next/image";
 
 export default function NewPwdPage() {
   const [password, setPassword] = useState("")
@@ -62,7 +63,7 @@ export default function NewPwdPage() {
         {/* Content */}
         <div className="relative text-center space-y-1">
           <div className="mx-auto size-12 rounded-xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
-            <img src="/logo.svg" alt="Logo" className="size-6" />
+            <Image src="/logo.svg" alt="Logo"  width={24} height={24} className="size-6" />
           </div>
           <h2 className="text-3xl font-semibold text-white">Set a new password</h2>
           <p className="text-sm text-gray-400">Enter and confirm your new password.</p>

@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabaseClient"
 import { toast } from "sonner"
+import Image from "next/image";
 
 export default function VerifyMailPage() {
   const [resendTimer, setResendTimer] = useState(30)
@@ -65,7 +66,7 @@ export default function VerifyMailPage() {
 
         <div className="relative text-center space-y-2">
           <div className="mx-auto size-12 rounded-xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
-            <img src="/logo.svg" alt="Logo" className="size-6" />
+            <Image src="/logo.svg" alt="Logo"  width={24} height={24} className="size-6" />
           </div>
           <h2 className="text-3xl font-semibold text-white">Verify your email</h2>
           <p className="text-sm text-gray-400">

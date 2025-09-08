@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
+import Image from "next/image";
 
 export default function ResetPwd() {
   const [email, setEmail] = useState("")
@@ -29,7 +30,6 @@ export default function ResetPwd() {
     })
     if (error) toast.error(error.message)
     else toast.success("Password reset link sent. Check your inbox.")
-
   }
 
   return (
@@ -55,7 +55,7 @@ export default function ResetPwd() {
         {/* Card content */}
         <div className="relative text-center space-y-1">
           <div className="mx-auto size-12 rounded-xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
-            <img src="/logo.svg" alt="Logo" className="size-6" />
+            <Image src="/logo.svg" alt="Logo"  width={24} height={24} className="size-6" />
           </div>
           <h2 className="text-3xl font-semibold text-white">Reset your password</h2>
           <p className="text-sm text-gray-400">Enter your email to receive a reset link.</p>
