@@ -74,7 +74,6 @@ export default function LoginPage() {
         sameSite: "strict",
       });
       dispatch(setUser(user));
-      localStorage.setItem("email", email);
       router.push("/dashboard");
     }
   };
@@ -87,6 +86,7 @@ export default function LoginPage() {
   };
 
   const handleResetPassword = () => {
+    localStorage.setItem("email", email);
     router.push(`/auth/resetpwd`);
   };
 

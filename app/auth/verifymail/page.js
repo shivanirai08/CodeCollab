@@ -8,21 +8,20 @@ import { toast } from "sonner"
 import Image from "next/image";
 
 export default function VerifyMailPage() {
+  const [email, setEmail] = useState("")
   const [resendTimer, setResendTimer] = useState(30)
   const [resending, setResending] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
-    const email = localStorage.getItem("email")
-    if (email) {
-      setEmail(email)
-    }
+      const storedEmail = localStorage.getItem("email")
+      if (storedEmail) setEmail(storedEmail)
   }, [])
 
   useEffect(() => {
     let timer
     if (resendTimer > 0) {
-      timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000)
+      timer = setTimeout(() => setResendTimer((t) => t - 1), 1000)
     }
     return () => clearTimeout(timer)
   }, [resendTimer])
