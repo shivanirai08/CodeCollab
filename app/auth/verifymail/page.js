@@ -12,8 +12,12 @@ export default function VerifyMailPage() {
   const [resending, setResending] = useState(false)
   const router = useRouter()
 
-  //email from signup page
-  const email = localStorage.getItem("email")
+  useEffect(() => {
+    const email = localStorage.getItem("email")
+    if (email) {
+      setEmail(email)
+    }
+  }, [])
 
   useEffect(() => {
     let timer
