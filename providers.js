@@ -8,9 +8,9 @@ import HydrateAuth from "./hydrate-auth";
 
 export default function Providers({ children }) {
   return <Provider store={store}>
-          <TransitionProvider>
+          {/* <TransitionProvider> */}
             <HydrateAuth />{children}
             <Toaster richColors position="top-right" />
-          </TransitionProvider>
+          {/* </TransitionProvider> */}
         </Provider>;
 }

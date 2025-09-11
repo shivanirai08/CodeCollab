@@ -30,9 +30,9 @@ export function middleware(req) {
   }
 
   // Protected pages
-  if (!token && pathname.startsWith("/dashboard")) {
-    return NextResponse.redirect(new URL("/auth/login", req.url));
-  }
+  // if (!token && pathname.startsWith("/dashboard")) {
+  //   return NextResponse.redirect(new URL("/auth/login", req.url));
+  // }
 
   return NextResponse.next();
 }
