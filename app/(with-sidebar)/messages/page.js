@@ -40,7 +40,7 @@ export default function MessagesPage() {
           {/* Replace with live messages */}
           <div className="space-y-3">
             <div className="text-gray-300">
-              <b>Shivani:</b> Let's finalize UI.
+              <b>Shivani:</b> Let&apos;s finalize UI.
             </div>
             <div className="text-gray-300">
               <b>Ankit:</b> Sure, working on it.
