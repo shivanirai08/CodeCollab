@@ -58,7 +58,7 @@ export default function FileSidebar({ className }) {
       )}
     >
       {/* Logo */}
-            <div className="flex items-center gap-3 px-4 py-8">
+            <div className="flex items-center gap-3 px-4 pt-8 pb-6">
               <Image src="/logo.svg" alt="Logo" width={32} height={32} className="h-6 w-6" />
               {!collapsed && <div className="text-lg font-semibold">CodeCollab</div>}
             </div>

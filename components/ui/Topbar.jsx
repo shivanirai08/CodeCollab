@@ -4,14 +4,19 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Search, Bell } from "lucide-react"
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
+import Cookies from "js-cookie";
 
-  const handleLogout = async () => {
+export default function Topbar() {
+  const router = useRouter();
+
+    const handleLogout = async () => {
     await supabase.auth.signOut();
     Cookies.remove("sb-access-token");
     router.push("/");
   };
 
-export default function Topbar() {
     return(
         <div className="sticky top-0 z-10 flex items-center justify-between gap-4 py-6 bg-background py-4">
                   <div className="relative w-full max-w-xl">
@@ -19,10 +24,10 @@ export default function Topbar() {
                     <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
                   </div>
                   <div className="flex items-center gap-3">
-                    <Button variant="outline" className="border-white text-white hover:bg-white/10 bg-[#121217]">
+                    <Button variant="outline" className="border-white text-white hover:bg-white/10 bg-[#121217]" onClick={()=>{router.push("/joinproject")}}>
                       Join Project
                     </Button>
-                    <Button className="bg-gradient-to-b from-[#FFF] to-[#6B696D] text-black">
+                    <Button className="bg-gradient-to-b from-[#FFF] to-[#6B696D] text-black" onClick={()=>{router.push("/createproject")}}>
                       Create Project
                     </Button>
                     <Button variant="ghost" size="icon" className="rounded-full bg-[#212126] hover:bg-[#2F2F35] size-10">

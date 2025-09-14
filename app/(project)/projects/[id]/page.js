@@ -2,17 +2,19 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, X } from "lucide-react";
+import { ChevronLeft, X, Terminal, Play } from "lucide-react";
 import FileSidebar from "@/components/ui/FileSidebar";
 import { FiMessageSquare } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import MonacoEditor from "@/components/ui/Editor";
 
 export default function ProjectWorkspacePage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("index.html");
   const [isSending, setIsSending] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [inputValue, setInputValue] = useState("");
 
   return (
     <div className="flex h-screen bg-background">
@@ -22,10 +24,13 @@ export default function ProjectWorkspacePage() {
       {/* Main content area */}
       <main className="flex-1 overflow-y-auto pb-4">
         <div className="flex h-full flex-col">
-          <TopBar onToggleChat={() => setIsChatOpen((v) => !v)} isChatOpen={isChatOpen}/>
+          <TopBar
+            onToggleChat={() => setIsChatOpen((v) => !v)}
+            isChatOpen={isChatOpen}
+          />
 
           {/* Workspace frame */}
-          <div className="mx-4 flex flex-row h-full flex-1 rounded-sm">
+          <div className="mx-4 flex flex-row h-full flex-1 rounded-sm mt-2">
             {/* Left: Editor */}
             <div
               className={cn(
@@ -50,12 +55,37 @@ export default function ProjectWorkspacePage() {
                   onClick={() => setActiveTab("script.js")}
                   active={activeTab}
                 />
-                <div className="ml-auto" />
+                <div className="ml-auto flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-[#C9C9D6] hover:text-white hover:bg-[#1A1A20] px-2 py-1"
+                    onClick={() => {
+                      // Terminal functionality
+                      console.log("Open terminal");
+                    }}
+                  >
+                    <Terminal className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-[#C9C9D6] hover:text-white hover:bg-[#1A1A20] px-2 py-1"
+                    onClick={() => {
+                      // Run code functionality
+                      console.log("Run code");
+                    }}
+                  >
+                    <Play className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
 
               {/* Editor area */}
               <div className="relative flex-1 w-full bg-[#202026] min-w-0 overflow-hidden rounded-sm">
-                <div id="editor-mount" className="absolute inset-0" />
+                <div className="relative w-full bg-[#0B0B0F] h-full">
+                  <MonacoEditor activeTab={activeTab}/>
+                </div>
               </div>
             </div>
 
@@ -70,32 +100,33 @@ export default function ProjectWorkspacePage() {
                 <div className="text-sm font-semibold text-[#E1E1E6]">
                   Chats
                 </div>
-                <button
+                <Button
+                  variant="ghost"
                   onClick={() => setIsChatOpen(false)}
-                  className="text-[#C9C9D6] hover:text-white"
-                  aria-label="Close chat"
+                 
                 >
                   <X className="h-4 w-4" />
-                </button>
+                </Button>
               </div>
 
               <div className="flex-1 space-y-3 overflow-y-auto p-4">
-                <div className="text-[#C9C9D6]">
-                  This space is reserved for the chat panel.
-                </div>
-                <div className="text-sm text-[#8D8D98]">
-                  Hook your chat messages here.
-                </div>
+                {messages.map((msg) => (
+                  <div key={msg.id} className="text-sm text-[#E1E1E6]">
+                    {msg.text}
+                  </div>
+                ))}
               </div>
 
               <div className="flex border-t border-[#36363E] p-3">
                 <Input
                   type="text"
                   placeholder="Type message.."
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      const message = e.target.value;
+                      const message = inputValue;
                       if (message) {
                         setIsSending(true);
                         console.log(message);
@@ -107,7 +138,7 @@ export default function ProjectWorkspacePage() {
                           text: message,
                         };
                         setMessages((prev) => [...prev, newMessage]);
-                        e.target.value = "";
+                        setInputValue("");
                       }
                     }
                   }}
@@ -160,7 +191,7 @@ function Tab({ name, active, onClick }) {
   );
 }
 
-function TopBar({ onToggleChat , isChatOpen}) {
+function TopBar({ onToggleChat, isChatOpen }) {
   return (
     <div className="flex items-center justify-between px-4 pt-6 pb-2">
       {/* Left: Project Name */}
@@ -183,7 +214,9 @@ function TopBar({ onToggleChat , isChatOpen}) {
         {/* Chat Button */}
         <Button
           onClick={onToggleChat}
-          className={`rounded-full border border-[var(--border)] bg-transparent text-white hover:bg-[var(--accent)] w-10 h-10 ${isChatOpen ? 'bg-[var(--secondary)]' : ''}`}
+          className={`rounded-full border border-[var(--border)] bg-transparent text-white hover:bg-[var(--accent)] w-10 h-10 ${
+            isChatOpen ? "bg-[var(--secondary)]" : ""
+          }`}
         >
           <FiMessageSquare className="h-5 w-5" />
         </Button>
