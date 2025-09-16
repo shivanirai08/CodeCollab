@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import Link from "next/link";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function CreateProjectPage() {
   const [formData, setFormData] = useState({
@@ -43,17 +44,47 @@ export default function CreateProjectPage() {
 
     setIsLoading(true);
 
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      console.log("Creating project with data:", formData);
-      toast.success(
-        `Project "${formData.projectName}" created successfully! (Demo)`
-      );
+    try{
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("You must be logged in to create a project");
+        setIsLoading(false);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('projects')
+        .insert([
+          {
+            title: formData.projectName,
+            description: formData.description,
+            visibility: formData.visibility,
+            template: formData.template,
+            language: formData.language,
+            owner_id: user.id,
+          },
+        ])
+        .select()
+        .single();
+      if (data) {
+        toast.success(`Project "${data.name}" created successfully!`);
+        setFormData({
+          projectName: "",
+          description: "",
+          visibility: "private",
+          template: "blank",
+          language: "html",
+        });
+        setIsLoading(false);
+        console.log("Created project:", data);
+      }
+      if (error) throw error;
     } catch (err) {
       toast.error("Failed to create project. Please try again.");
     } finally {
       setIsLoading(false);
     }
+
   };
 
   return (
