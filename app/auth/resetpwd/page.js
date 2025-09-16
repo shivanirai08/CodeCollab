@@ -12,12 +12,6 @@ export default function ResetPwd() {
   const [email, setEmail] = useState("")
   const router = useRouter()
 
-  useEffect(() => {
-    const email = localStorage.getItem("email")
-    if (email) {
-      setEmail(email)
-    }
-  }, [])
 
   const handleResetPassword = async (e) => {
     e.preventDefault()

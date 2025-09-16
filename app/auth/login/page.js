@@ -11,7 +11,6 @@ import { FcGoogle } from "react-icons/fc";
 import { EyeClosed, Eye } from "lucide-react";
 import { useDispatch } from "react-redux";
 import { setUser } from "@/store/authSlice";
-import Cookies from "js-cookie";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -24,59 +23,44 @@ export default function LoginPage() {
   const dispatch = useDispatch();
 
   const handleLogin = async (e) => {
-    e.preventDefault();
-    if (!email || email.trim() === "" || email.includes(" ")) {
-      setError({ email: true });
-      toast.error("Email is required.");
-      return;
-    }
-    if (!password || password.trim() === "") {
-      setError({ password: true });
-      toast.error("Password is required.");
-      return;
-    }
-    setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    const res = await fetch("/api/checkuser", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    const { exists } = await res.json();
-    if (!exists) {
-      toast.error("No user found with this email. Please sign up first.");
-      setError({ email: true, password: false });
-      setLoading(false);
-      return;
-    }
-    if (exists && error) {
-      toast.error("Wrong password. Please try again.");
-      setError({ email: false, password: true });
-      setLoading(false);
-      return;
-    } else {
-      setLoading(false);
-      toast.success("Logged in successfully!");
-      const user = {
-        email: data.user.email,
-        id: data.user.id,
-        token: data.session.access_token,
-      };
-      await supabase.from("users").insert({
-        id: data.user.id,
-        email: data.user.email,
-      });
-      Cookies.set("sb-access-token", user.token, {
-        secure: true,
-        sameSite: "strict",
-      });
-      dispatch(setUser(user));
-      router.push("/dashboard");
-    }
+  e.preventDefault();
+  if (!email || email.trim() === "" || email.includes(" ")) {
+    setError({ email: true, password: false });
+    toast.error("Email is required.");
+    return;
+  }
+  if (!password || password.trim() === "") {
+    setError({ email: false, password: true });
+    toast.error("Password is required.");
+    return;
+  }
+
+  setLoading(true);
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    toast.error("Invalid email or password.");
+    setError({ email: true, password: true });
+    setLoading(false);
+    return;
+  }
+
+  setLoading(false);
+  toast.success("Logged in successfully!");
+
+  const user = {
+    email: data.user.email,
+    id: data.user.id,
+    token: data.session.access_token,
   };
+
+  dispatch(setUser(user));
+  router.push("/dashboard");
+};
 
   const handleGoogleLogin = async () => {
     await supabase.auth.signInWithOAuth({
@@ -86,7 +70,6 @@ export default function LoginPage() {
   };
 
   const handleResetPassword = () => {
-    localStorage.setItem("email", email);
     router.push(`/auth/resetpwd`);
   };
 

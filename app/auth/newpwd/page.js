@@ -89,7 +89,7 @@ export default function NewPwdPage() {
               value={confirmPassword}
               onChange={(e) => {setConfirmPassword(e.target.value); setError({...error, confirmpwd: false})}}
               className="mt-1 bg-white/5 border-white/20 placeholder:text-gray-500 text-white"
-              ariala-invalid={error.confirmpwd}
+              aria-invalid={error.confirmpwd}
             />
           </div>
         </div>

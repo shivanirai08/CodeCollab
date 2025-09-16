@@ -28,63 +28,72 @@ export default function SignupPage() {
   const router = useRouter();
 
 
-  const handleSignup = async (e) => {
-    e.preventDefault();
-    if (!email || email.trim() === "" || email.includes(" ")) {
-      setError({ email: true });
-      toast.error("Enter a valid email address.");
-      return;
-    }
-    if (!password || password.length < 6) {
-      setError({ password: true });
-      toast.error("Password must be at least 6 characters.");
-      return;
-    }
-    if (!acceptedTerms) {
-      toast.error("You must accept the Terms and Conditions to continue.");
-      return;
-    }
-    setLoading(true);
+ const handleSignup = async (e) => {
+  e.preventDefault();
 
-    // 1. Call backend API to check if user exists
-    const res = await fetch("/api/checkuser", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
+  if (!email || email.trim() === "" || email.includes(" ")) {
+    setError({ email: true });
+    toast.error("Enter a valid email address.");
+    return;
+  }
+  if (!password || password.length < 6) {
+    setError({ password: true });
+    toast.error("Password must be at least 6 characters.");
+    return;
+  }
+  if (!acceptedTerms) {
+    toast.error("You must accept the Terms and Conditions to continue.");
+    return;
+  }
 
-    const { exists } = await res.json();
+  setLoading(true);
 
-    if (exists) {
-      toast.error("Email already registered. Please sign in instead.");
-      setLoading(false);
-      return;
-    }
+  // 1. Check if user already exists
+  const res = await fetch("/api/checkuser", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
 
-    // 2. Proceed with Supabase sign-up
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        // data: { username },
-        emailRedirectTo: `${window.location.origin}/dashboard`,
-      },
-    });
-    if (error) {
-      toast.error(error.message);
-      setLoading(false);
-      return;
-    } else {
-      toast.success("Signup successful! Please verify your email.");
-      localStorage.setItem("email", email);
-      router.push(`/auth/verifymail`);
-      setLoading(false);
-      await supabase.from("users").insert({
-      id: data.user.id,
-      email: data.user.email,
-});
-    }
-  };
+  const { exists } = await res.json();
+
+  if (exists) {
+    toast.error("Email already registered. Please sign in instead.");
+    setLoading(false);
+    return;
+  }
+
+  // 2. Proceed with Supabase signup
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: `${window.location.origin}/dashboard`,
+    },
+  });
+
+  if (error) {
+    toast.error(error.message);
+    setLoading(false);
+    return;
+  }
+
+  if (!data.user) {
+    // fallback safety check
+    toast.error("Something went wrong. Please try again.");
+    setLoading(false);
+    return;
+  }
+
+  // Store email for verify screen
+  localStorage.setItem("email", email);
+
+  toast.success("Signup successful! Please verify your email.");
+  router.push("/auth/verifymail");
+  setLoading(false);
+};
+
+
 
   const handleGoogleLogin = async () => {
     await supabase.auth

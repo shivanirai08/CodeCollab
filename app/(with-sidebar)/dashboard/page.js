@@ -8,12 +8,16 @@ import ProjectCard from "@/components/ui/ProjectCard";
 export default function DashboardPage() {
   const router = useRouter();
   useEffect(() => {
-    const fetchData = async () => {
-      const { data, error } = await supabase.from("users").select("*");
-      console.log(data);
-    };
-    fetchData();
-  }, []);
+    const fetchUser = async () => {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    console.log(user);
+    fetchUser();
+  }}, []);
 
 
   const sampleProjects = [
