@@ -67,7 +67,7 @@ export default function CreateProjectPage() {
         .select()
         .single();
       if (data) {
-        toast.success(`Project "${data.name}" created successfully!`);
+        toast.success(`Project "${data.title}" created successfully!`);
         setFormData({
           projectName: "",
           description: "",

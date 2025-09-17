@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Key } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
-import Cookies from "js-cookie";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function JoinProjectPage() {
   const [projectCode, setProjectCode] = useState("");
@@ -17,30 +17,40 @@ export default function JoinProjectPage() {
     e.preventDefault();
 
     if (!/^[a-f0-9]{8}$/.test(projectCode)) {
-  toast.error("Project code must be 8 hex characters");
-  return;
-}
+      toast.error("Project code must be 8 hex characters");
+      return;
+    }
+    // const { data: { user }, error } = await supabase.auth.getUser();
 
     setIsLoading(true);
-
     try {
-      const token = Cookies.get("sb-access-token");
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
       const res = await fetch("/api/join", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({ joinCode: projectCode }),
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || "Request failed");
-      }
 
-      if (data.error) toast.error(data.error);
-      else toast.success(data.joined ? "Joined project!" : data.message);
+      if (!res.ok) {
+        toast.error(data?.error || "Request failed");
+        return;
+      }
+      if (data.error) {
+        toast.error(data.error);
+      } else if (data.joined) {
+        toast.success(data.message || "Joined project!");
+      } else {
+        toast.info(data.message || "Request sent");
+      }
     } catch (err) {
       console.error("Route error:", err);
       toast.error("Something went wrong");
