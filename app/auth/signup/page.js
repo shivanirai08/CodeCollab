@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,48 +48,33 @@ export default function SignupPage() {
   setLoading(true);
 
   // 1. Check if user already exists
-  const res = await fetch("/api/checkuser", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
+  // const res = await fetch("/api/checkuser", {
+  //   method: "POST",
+  //   headers: { "Content-Type": "application/json" },
+  //   body: JSON.stringify({ email }),
+  // });
 
-  const { exists } = await res.json();
+  // const { exists } = await res.json();
 
-  if (exists) {
-    toast.error("Email already registered. Please sign in instead.");
-    setLoading(false);
-    return;
-  }
+  // if (exists) {
+  //   toast.error("Email already registered. Please sign in instead.");
+  //   setLoading(false);
+  //   return;
+  // }
 
   // 2. Proceed with Supabase signup
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${window.location.origin}/dashboard`,
-    },
-  });
-
-  if (error) {
-    toast.error(error.message);
-    setLoading(false);
-    return;
-  }
-
-  if (!data.user) {
-    // fallback safety check
-    toast.error("Something went wrong. Please try again.");
-    setLoading(false);
-    return;
-  }
-
-  // Store email for verify screen
-  localStorage.setItem("email", email);
-
+  const res = await fetch('/api/signup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+  const data = await res.json()
+  if (data.error) toast.error(data.error)
+  else{
   toast.success("Signup successful! Please verify your email.");
-  router.push("/auth/verifymail");
+  router.push(`/auth/verifymail?email=${encodeURIComponent(email)}`);
   setLoading(false);
+  }
 };
 
 
@@ -101,7 +85,7 @@ export default function SignupPage() {
         provider: "google",
         options: { redirectTo: `${window.location.origin}/auth/callback` },
       });
-  };
+} 
 
   return (
     <div className="relative flex items-center justify-center min-h-screen px-4 bg-gradient-to-b from-background via-background to-[rgba(35, 34, 49, 0.2)]">

@@ -1,23 +1,22 @@
 "use client";
 
 import { useEffect } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import ProjectCard from "@/components/ui/ProjectCard";
 
 export default function DashboardPage() {
   const router = useRouter();
-  useEffect(() => {
-    const fetchUser = async () => {
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error) {
-      console.error(error);
-      return;
-    }
+  // useEffect(() => {
+  //   const fetchUser = async () => {
+  //   const { data: { user }, error } = await supabase.auth.getUser();
+  //   if (error) {
+  //     console.error(error);
+  //     return;
+  //   }
 
-    console.log(user);
-    fetchUser();
-  }}, []);
+  //   console.log(user);
+  //   fetchUser();
+  // }}, []);
 
 
   const sampleProjects = [

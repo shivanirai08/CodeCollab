@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabaseClient"
+import { useState} from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useRouter } from "next/navigation"
@@ -19,10 +18,13 @@ export default function ResetPwd() {
       toast.error("Enter your email to reset your password.")
       return
     }
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: "http://localhost:3000/auth/newpwd",
+    const res = await fetch("/api/resetpwd", {
+      method : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
     })
-    if (error) toast.error(error.message)
+    const data = res.json();
+    if (data.error) toast.error(data.error)
     else toast.success("Password reset link sent. Check your inbox.")
   }
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,30 +36,24 @@ export default function LoginPage() {
 
   setLoading(true);
 
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-  if (error) {
+  const res = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+  const data = await res.json()
+  if (data.error){
     toast.error("Invalid email or password.");
     setError({ email: true, password: true });
     setLoading(false);
     return;
   }
-
+  else{
   setLoading(false);
   toast.success("Logged in successfully!");
-
-  const user = {
-    email: data.user.email,
-    id: data.user.id,
-    token: data.session.access_token,
-  };
-
-  dispatch(setUser(user));
-  router.push("/dashboard");
-};
+  router.push('/dashboard');
+ }
+}
 
   const handleGoogleLogin = async () => {
     await supabase.auth.signInWithOAuth({

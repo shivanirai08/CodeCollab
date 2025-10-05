@@ -3,20 +3,16 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { supabase } from "@/lib/supabaseClient"
+import { useSearchParams } from 'next/navigation';
 import { toast } from "sonner"
 import Image from "next/image";
 
 export default function VerifyMailPage() {
-  const [email, setEmail] = useState("")
-  const [resendTimer, setResendTimer] = useState(30)
+  const searchParams = useSearchParams();
+  const email = searchParams.get("email");
+  const [resendTimer, setResendTimer] = useState(4)
   const [resending, setResending] = useState(false)
   const router = useRouter()
-
-  useEffect(() => {
-      const storedEmail = localStorage.getItem("email")
-      if (storedEmail) setEmail(storedEmail)
-  }, [])
 
   useEffect(() => {
     let timer
@@ -34,12 +30,14 @@ export default function VerifyMailPage() {
       return
     }
     // Resend verification email
-    const { error } = await supabase.auth.resend({
-      type: "signup",
-      email,
+    const res = await fetch("/api/resendmail",{
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
     })
-    if (error) {
-      toast.error(error.message)
+    const data = await res.json();
+    if (data.error) {
+      toast.error(data.error)
     } else {
       toast.success("Verification email resent. Please check your inbox.")
       setResendTimer(30)
@@ -48,7 +46,7 @@ export default function VerifyMailPage() {
   }
 
   const handleBackToSignup = () => {
-    router.push(`/auth/signup?email=${encodeURIComponent(email || "")}`)
+    router.push(`/auth/signup`)
   }
 
   return (

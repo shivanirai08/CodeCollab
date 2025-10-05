@@ -1,42 +1,32 @@
-// app/auth/callback/page.js
-"use client";
+'use client'
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
-import { useDispatch } from "react-redux";
-import { setUser } from "@/store/authSlice";
-import Cookies from "js-cookie";
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client' // or server utils if needed
 
-export default function CallbackPage() {
-  const router = useRouter();
-  const dispatch = useDispatch();
+export default function AuthCallbackPage() {
+  const router = useRouter()
 
   useEffect(() => {
-    const process = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const user = {
-          email: session.user.email,
-          id: session.user.id,
-          token: session.access_token,
-        };
-        dispatch(setUser(user));
-        Cookies.set("sb-access-token", user.token, { secure: true, sameSite: "strict" });
+    async function handleAuth() {
+      const supabase = createClient()
 
-        await supabase.from("users").upsert({
-          id: session.user.id,
-          email: session.user.email,
-        });
+      // v2 equivalent of getSessionFromUrl
+      const { session, error } = await supabase.auth.getSessionFromUrl({ storeSession: true })
 
-        router.push("/dashboard");
-      } else {
-        router.push("/auth/login");
+      if (error) {
+        console.error('OAuth callback error:', error)
+        router.push('/auth/error')
+        return
       }
-    };
 
-    process();
-  }, [dispatch, router]);
+      // session is now stored in localStorage or cookies (if you set it)
+      console.log('Logged in session:', session)
+      router.push('/dashboard')
+    }
 
-  return <p className="flex items-center justify-center">Finishing login...</p>;
+    handleAuth()
+  }, [router])
+
+  return <div>Processing authentication...</div>
 }
