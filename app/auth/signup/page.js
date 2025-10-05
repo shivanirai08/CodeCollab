@@ -119,7 +119,7 @@ export default function SignupPage() {
         "
       >
         {/* Top glow bar */}
-        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent blur-sm" />
+        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-zinc-100 to-transparent blur-sm" />
 
         {/* Card content */}
         <div className="relative text-center space-y-1">
@@ -177,7 +177,7 @@ export default function SignupPage() {
                 )}
                 <button
                   type="button"
-                  className="text-gray-500 hover:text-white bg-gray-700/50 hover:bg-gray-700/70 rounded-full size-6 flex items-center justify-center"
+                  className="text-zinc-500 hover:text-white bg-zinc-700/50 hover:bg-zinc-700/70 rounded-full size-6 flex items-center justify-center cursor-pointer"
                   onClick={() => setShowPasswordCriteria(!showPasswordCriteria)}
                 >
                   <Info className="size-4" />
@@ -225,7 +225,7 @@ export default function SignupPage() {
           </div>
           {/* Password criteria popup */}
           {showPasswordCriteria && (
-            <div className="absolute top-full left-0 mt-1 w-full p-3 bg-background/92 text-sm rounded-md shadow-lg border border-gray-700 z-10">
+            <div className="absolute top-full left-0 mt-1 w-full p-3 bg-background/90 backdrop-filter backdrop-blur-sm text-sm rounded-md shadow-lg border border-gray-700 z-10">
               <p className="mb-1 font-semibold text-gray-300">
                 Password must contain:
               </p>
@@ -255,7 +255,7 @@ export default function SignupPage() {
             type="checkbox"
             checked={acceptedTerms}
             onChange={(e) => setAcceptedTerms(e.target.checked)}
-            className="mt-0.5 size-4 rounded border-white/20 bg-white/5"
+            className="mt-1 size-4 rounded accent-black"
           />
           I agree to the{" "}
           <a href="#" className="underline ml-1 hover:text-white">
@@ -274,7 +274,7 @@ export default function SignupPage() {
 
         <div className="relative flex items-center justify-center">
           <span className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-          <span className="relative z-10 mx-3 rounded-full px-3 py-0.5 text-xs text-gray-300">
+          <span className="relative z-2 mx-3 rounded-full px-3 py-0.5 text-xs text-gray-300">
             OR
           </span>
           <span className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />

@@ -89,7 +89,7 @@ export default function LoginPage() {
           "
       >
         {/* Top glow bar */}
-        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent blur-sm" />
+        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-zinc-100 to-transparent blur-sm" />
 
         {/* Content */}
         <div className="relative text-center space-y-1">
@@ -156,7 +156,7 @@ export default function LoginPage() {
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="size-4 rounded border-white/20 bg-white/5 checked:bg-purple-500"
+                className="size-4 rounded accent-black"
               />
               Remember me
             </label>

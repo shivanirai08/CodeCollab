@@ -1,42 +1,53 @@
-import { NextResponse } from "next/server";
+// middleware.js
+import { NextResponse } from "next/server"
+import { createServerClient } from "@supabase/ssr"
 
-export function middleware(req) {
-  const token = req.cookies.get("sb-access-token")?.value; 
+export async function middleware(req) {
+  const res = NextResponse.next()
 
-  const { pathname, searchParams } = req.nextUrl;
-
-  // Restrict /auth/newpwd
-  if (pathname.startsWith("/auth/newpwd")) {
-    const resetToken = searchParams.get("token");
-
-    // If no token in URL → redirect back to reset password request page
-    if (!resetToken) {
-      return NextResponse.redirect(new URL("/auth/resetpwd", req.url));
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      cookies: {
+        get(name) {
+          return req.cookies.get(name)?.value
+        },
+        set(name, value, options) {
+          res.cookies.set({ name, value, ...options })
+        },
+        remove(name, options) {
+          res.cookies.set({ name, value: "", ...options })
+        },
+      },
     }
-  }
-  
-  // Public pages
-  if (
-    pathname.startsWith("/auth") ||
-    pathname === "/" ||
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/api")
-  ) {
-    if (token && (pathname.startsWith("/auth") || pathname === "/")) {
-      // logged in user trying to access login/signup/landing → redirect
-      return NextResponse.redirect(new URL("/dashboard", req.url));
-    }
-    return NextResponse.next();
+  )
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  const { pathname } = req.nextUrl
+
+  if (!user && pathname.startsWith("/dashboard")) {
+    return NextResponse.redirect(new URL("/auth/login", req.url))
   }
 
-  // Protected pages
-  // if (!token && pathname.startsWith("/dashboard")) {
-  //   return NextResponse.redirect(new URL("/auth/login", req.url));
-  // }
+  if (user && pathname.startsWith("/auth")) {
+    return NextResponse.redirect(new URL("/dashboard", req.url))
+  }
 
-  return NextResponse.next();
+  return res
 }
 
 export const config = {
-  matcher: ["/", "/auth/:path*", "/dashboard/:path*"],
-};
+  matcher: [
+    "/dashboard/:path*",
+    "/projects/:path*",
+    "/createproject",
+    "/joinproject",
+    "/settings",
+    "/messages",
+    "/auth/:path*",
+  ],
+}
