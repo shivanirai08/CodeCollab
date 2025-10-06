@@ -30,7 +30,7 @@ export default function NewPwdPage() {
       toast.error("Passwords do not match.")
       return
     }
-    // Update password using Supabase
+    // Calling pwd api
     const res = await fetch("api/newpwd",{
       method : "POST",
       headers: { "Content-Type": "application/json" },

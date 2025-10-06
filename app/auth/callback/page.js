@@ -1,32 +1,30 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client' // or server utils if needed
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 export default function AuthCallbackPage() {
-  const router = useRouter()
+  const router = useRouter();
 
   useEffect(() => {
-    async function handleAuth() {
-      const supabase = createClient()
+    const handleAuthCallback = async () => {
+      const supabase = createClient();
 
-      // v2 equivalent of getSessionFromUrl
-      const { session, error } = await supabase.auth.getSessionFromUrl({ storeSession: true })
+      // Parse the fragment (the part after #)
+      const { data, error } = await supabase.auth.getSessionFromUrl({ storeSession: true });
 
-      if (error) {
-        console.error('OAuth callback error:', error)
-        router.push('/auth/error')
-        return
+      if (!error) {
+        // Now user is signed in and session is stored
+        router.replace("/dashboard");
+      } else {
+        console.error("Auth callback error:", error.message);
+        router.replace("/login");
       }
+    };
 
-      // session is now stored in localStorage or cookies (if you set it)
-      console.log('Logged in session:', session)
-      router.push('/dashboard')
-    }
+    handleAuthCallback();
+  }, [router]);
 
-    handleAuth()
-  }, [router])
-
-  return <div>Processing authentication...</div>
+  return <p className="text-center mt-10">Completing sign-in...</p>;
 }

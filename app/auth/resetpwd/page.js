@@ -18,6 +18,7 @@ export default function ResetPwd() {
       toast.error("Enter your email to reset your password.")
       return
     }
+    // calling resetpwd api
     const res = await fetch("/api/resetpwd", {
       method : "POST",
       headers: { "Content-Type": "application/json" },

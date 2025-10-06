@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/card";
 import { Key } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabaseClient";
 
 export default function JoinProjectPage() {
   const [projectCode, setProjectCode] = useState("");

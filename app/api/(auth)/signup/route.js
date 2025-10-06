@@ -5,10 +5,6 @@ export async function POST(req) {
   try {
     const { email, password } = await req.json()
 
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
-    }
-
     // 1. Service role client to query the users table
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,

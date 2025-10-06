@@ -80,12 +80,8 @@ export default function SignupPage() {
 
 
   const handleGoogleLogin = async () => {
-    await supabase.auth
-      .signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
-      });
-} 
+    window.location.href = '/api/oauth'
+}
 
   return (
     <div className="relative flex items-center justify-center min-h-screen px-4 bg-gradient-to-b from-background via-background to-[rgba(35, 34, 49, 0.2)]">

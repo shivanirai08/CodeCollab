@@ -10,7 +10,7 @@ import Image from "next/image";
 export default function VerifyMailPage() {
   const searchParams = useSearchParams();
   const email = searchParams.get("email");
-  const [resendTimer, setResendTimer] = useState(4)
+  const [resendTimer, setResendTimer] = useState(50)
   const [resending, setResending] = useState(false)
   const router = useRouter()
 
@@ -40,8 +40,8 @@ export default function VerifyMailPage() {
       toast.error(data.error)
     } else {
       toast.success("Verification email resent. Please check your inbox.")
-      setResendTimer(30)
     }
+    setResendTimer(50)
     setResending(false)
   }
 
