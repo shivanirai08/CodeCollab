@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,62 +26,44 @@ export default function SignupPage() {
   const [hasMinLength, setHasMinLength] = useState(false);
   const router = useRouter();
 
+  const handleSignup = async (e) => {
+    e.preventDefault();
 
- const handleSignup = async (e) => {
-  e.preventDefault();
+    if (!email || email.trim() === "" || email.includes(" ")) {
+      setError({ email: true });
+      toast.error("Enter a valid email address.");
+      return;
+    }
+    if (!password || password.length < 6) {
+      setError({ password: true });
+      toast.error("Password must be at least 6 characters.");
+      return;
+    }
+    if (!acceptedTerms) {
+      toast.error("You must accept the Terms and Conditions to continue.");
+      return;
+    }
 
-  if (!email || email.trim() === "" || email.includes(" ")) {
-    setError({ email: true });
-    toast.error("Enter a valid email address.");
-    return;
-  }
-  if (!password || password.length < 6) {
-    setError({ password: true });
-    toast.error("Password must be at least 6 characters.");
-    return;
-  }
-  if (!acceptedTerms) {
-    toast.error("You must accept the Terms and Conditions to continue.");
-    return;
-  }
+    setLoading(true);
 
-  setLoading(true);
-
-  // 1. Check if user already exists
-  // const res = await fetch("/api/checkuser", {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
-  //   body: JSON.stringify({ email }),
-  // });
-
-  // const { exists } = await res.json();
-
-  // if (exists) {
-  //   toast.error("Email already registered. Please sign in instead.");
-  //   setLoading(false);
-  //   return;
-  // }
-
-  // 2. Proceed with Supabase signup
-  const res = await fetch('/api/signup', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  })
-  const data = await res.json()
-  if (data.error) toast.error(data.error)
-  else{
-  toast.success("Signup successful! Please verify your email.");
-  router.push(`/auth/verifymail?email=${encodeURIComponent(email)}`);
-  setLoading(false);
-  }
-};
-
-
+    // calling signup api
+    const res = await fetch("/api/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (data.error) toast.error(data.error);
+    else {
+      toast.success("Signup successful! Please verify your email.");
+      router.push(`/auth/verifymail?email=${encodeURIComponent(email)}`);
+      setLoading(false);
+    }
+  };
 
   const handleGoogleLogin = async () => {
-    window.location.href = '/api/oauth'
-}
+    window.location.href = "/api/oauth";
+  };
 
   return (
     <div className="relative flex items-center justify-center min-h-screen px-4 bg-gradient-to-b from-background via-background to-[rgba(35, 34, 49, 0.2)]">
@@ -104,7 +86,13 @@ export default function SignupPage() {
         {/* Card content */}
         <div className="relative text-center space-y-1">
           <div className="mx-auto size-12 rounded-xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
-            <Image src="/logo.svg" alt="Logo"  width={24} height={24} className="size-6" />
+            <Image
+              src="/logo.svg"
+              alt="Logo"
+              width={24}
+              height={24}
+              className="size-6"
+            />
           </div>
           <h2 className="text-3xl font-semibold text-white">
             Create your account

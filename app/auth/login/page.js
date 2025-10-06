@@ -8,8 +8,6 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { FcGoogle } from "react-icons/fc";
 import { EyeClosed, Eye } from "lucide-react";
-import { useDispatch } from "react-redux";
-import { setUser } from "@/store/authSlice";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -19,44 +17,45 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [visible, setVisible] = useState(false);
   const router = useRouter();
-  const dispatch = useDispatch();
 
   const handleLogin = async (e) => {
-  e.preventDefault();
-  if (!email || email.trim() === "" || email.includes(" ")) {
-    setError({ email: true, password: false });
-    toast.error("Email is required.");
-    return;
-  }
-  if (!password || password.trim() === "") {
-    setError({ email: false, password: true });
-    toast.error("Password is required.");
-    return;
-  }
+    e.preventDefault();
 
-  setLoading(true);
+    //checking email and pwd field
+    if (!email || email.trim() === "" || email.includes(" ")) {
+      setError({ email: true, password: false });
+      toast.error("Email is required.");
+      return;
+    }
+    if (!password || password.trim() === "") {
+      setError({ email: false, password: true });
+      toast.error("Password is required.");
+      return;
+    }
 
-  const res = await fetch('/api/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  })
-  const data = await res.json()
-  if (data.error){
-    toast.error("Invalid email or password.");
-    setError({ email: true, password: true });
-    setLoading(false);
-    return;
-  }
-  else{
-  setLoading(false);
-  toast.success("Logged in successfully!");
-  router.push('/dashboard');
- }
-}
+    setLoading(true);
+
+    // calling login api
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      toast.error("Invalid email or password.");
+      setError({ email: true, password: true });
+      setLoading(false);
+      return;
+    } else {
+      setLoading(false);
+      toast.success("Logged in successfully!");
+      router.push("/dashboard");
+    }
+  };
 
   const handleGoogleLogin = async () => {
-    window.location.href = '/api/oauth'
+    window.location.href = "/api/oauth";
   };
 
   const handleResetPassword = () => {
