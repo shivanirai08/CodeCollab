@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { Input } from "@/components/ui/input"
-import { supabase } from "@/lib/supabaseClient"
 import Image from "next/image";
 
 export default function VerifyOtpPage() {
@@ -66,11 +65,7 @@ export default function VerifyOtpPage() {
       setError("Please enter a valid 6-digit OTP.")
       return
     }
-    const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token: otpString,
-      type: "email",
-    })
+    // call otp api
     if (error) {
       setError("Failed to verify OTP. Please try again.")
     } else {
@@ -106,7 +101,7 @@ export default function VerifyOtpPage() {
         "
       >
         {/* Top glow bar */}
-        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent blur-sm" />
+        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-zinc-100 to-transparent blur-sm" />
 
         {/* Content */}
         <div className="relative text-center space-y-1">

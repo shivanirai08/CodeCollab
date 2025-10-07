@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { supabase } from "@/lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -31,9 +30,14 @@ export default function NewPwdPage() {
       toast.error("Passwords do not match.")
       return
     }
-    // Update password using Supabase
-    const { error } = await supabase.auth.updateUser({ password })
-    if (error) toast.error(error.message)
+    // Calling pwd api
+    const res = await fetch("api/newpwd",{
+      method : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    })
+    const data = res.json();
+    if (data.error) toast.error(data.error)
     else {
       toast.success("Password updated successfully. Redirecting to login...")
       setTimeout(() => {
@@ -58,7 +62,7 @@ export default function NewPwdPage() {
         "
       >
         {/* Top glow bar */}
-        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent blur-sm" />
+        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-zinc-100 to-transparent blur-sm" />
 
         {/* Content */}
         <div className="relative text-center space-y-1">
@@ -102,7 +106,7 @@ export default function NewPwdPage() {
         </Button>
 
         <p className="text-center text-sm text-gray-400">
-          Remembered your password?{" "}
+          Remember your password?{" "}
           <Button variant="link" className="hover:text-white" onClick = {() => {router.push("/auth/login")}}>
             Sign in
           </Button>

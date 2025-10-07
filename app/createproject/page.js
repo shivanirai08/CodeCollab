@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/select";
 import Link from "next/link";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabaseClient";
 
 export default function CreateProjectPage() {
   const [formData, setFormData] = useState({

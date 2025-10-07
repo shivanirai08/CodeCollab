@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,8 +8,6 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { FcGoogle } from "react-icons/fc";
 import { EyeClosed, Eye } from "lucide-react";
-import { useDispatch } from "react-redux";
-import { setUser } from "@/store/authSlice";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -20,53 +17,45 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [visible, setVisible] = useState(false);
   const router = useRouter();
-  const dispatch = useDispatch();
 
   const handleLogin = async (e) => {
-  e.preventDefault();
-  if (!email || email.trim() === "" || email.includes(" ")) {
-    setError({ email: true, password: false });
-    toast.error("Email is required.");
-    return;
-  }
-  if (!password || password.trim() === "") {
-    setError({ email: false, password: true });
-    toast.error("Password is required.");
-    return;
-  }
+    e.preventDefault();
 
-  setLoading(true);
+    //checking email and pwd field
+    if (!email || email.trim() === "" || email.includes(" ")) {
+      setError({ email: true, password: false });
+      toast.error("Email is required.");
+      return;
+    }
+    if (!password || password.trim() === "") {
+      setError({ email: false, password: true });
+      toast.error("Password is required.");
+      return;
+    }
 
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+    setLoading(true);
 
-  if (error) {
-    toast.error("Invalid email or password.");
-    setError({ email: true, password: true });
-    setLoading(false);
-    return;
-  }
-
-  setLoading(false);
-  toast.success("Logged in successfully!");
-
-  const user = {
-    email: data.user.email,
-    id: data.user.id,
-    token: data.session.access_token,
+    // calling login api
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      toast.error("Invalid email or password.");
+      setError({ email: true, password: true });
+      setLoading(false);
+      return;
+    } else {
+      setLoading(false);
+      toast.success("Logged in successfully!");
+      router.push("/dashboard");
+    }
   };
 
-  dispatch(setUser(user));
-  router.push("/dashboard");
-};
-
   const handleGoogleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
+    window.location.href = "/api/oauth";
   };
 
   const handleResetPassword = () => {
@@ -89,7 +78,7 @@ export default function LoginPage() {
           "
       >
         {/* Top glow bar */}
-        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent blur-sm" />
+        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-zinc-100 to-transparent blur-sm" />
 
         {/* Content */}
         <div className="relative text-center space-y-1">
@@ -156,7 +145,7 @@ export default function LoginPage() {
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="size-4 rounded border-white/20 bg-white/5 checked:bg-purple-500"
+                className="size-4 rounded accent-black"
               />
               Remember me
             </label>

@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabaseClient"
+import { useState} from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useRouter } from "next/navigation"
@@ -19,10 +18,14 @@ export default function ResetPwd() {
       toast.error("Enter your email to reset your password.")
       return
     }
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: "http://localhost:3000/auth/newpwd",
+    // calling resetpwd api
+    const res = await fetch("/api/resetpwd", {
+      method : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
     })
-    if (error) toast.error(error.message)
+    const data = res.json();
+    if (data.error) toast.error(data.error)
     else toast.success("Password reset link sent. Check your inbox.")
   }
 
@@ -44,7 +47,7 @@ export default function ResetPwd() {
         "
       >
         {/* Top glow bar */}
-        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent blur-sm" />
+        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-zinc-100 to-transparent blur-sm" />
 
         {/* Card content */}
         <div className="relative text-center space-y-1">

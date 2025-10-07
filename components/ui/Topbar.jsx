@@ -5,16 +5,18 @@ import { Input } from "@/components/ui/input"
 import { Search, Bell } from "lucide-react"
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
-import Cookies from "js-cookie";
+import { toast } from "sonner";
 
 export default function Topbar() {
   const router = useRouter();
 
     const handleLogout = async () => {
-    await supabase.auth.signOut();
-    Cookies.remove("sb-access-token");
-    router.push("/");
+    const res = await fetch('/api/signout', { method: 'POST' })
+    const data = await res.json()
+    if (data.error) alert(data.error)
+    else{
+     toast.success("Logged out successfully!")
+     router.push('/auth/login')}
   };
 
     return(

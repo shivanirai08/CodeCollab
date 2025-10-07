@@ -1,42 +1,38 @@
-// app/auth/callback/page.js
-"use client";
-
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
-import { useDispatch } from "react-redux";
-import { setUser } from "@/store/authSlice";
-import Cookies from "js-cookie";
+'use client'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 
 export default function CallbackPage() {
-  const router = useRouter();
-  const dispatch = useDispatch();
+  const router = useRouter()
 
   useEffect(() => {
-    const process = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const user = {
-          email: session.user.email,
-          id: session.user.id,
-          token: session.access_token,
-        };
-        dispatch(setUser(user));
-        Cookies.set("sb-access-token", user.token, { secure: true, sameSite: "strict" });
+    const handleAuth = async () => {
+      const hash = window.location.hash
+      const params = new URLSearchParams(hash.replace('#', ''))
+      const access_token = params.get('access_token')
+      const refresh_token = params.get('refresh_token')
 
-        await supabase.from("users").upsert({
-          id: session.user.id,
-          email: session.user.email,
-        });
+      if (access_token && refresh_token) {
+        const supabase = createClient()
+        const { error } = await supabase.auth.setSession({
+          access_token,
+          refresh_token,
+        })
 
-        router.push("/dashboard");
+        if (error) {
+          console.error('Failed to set session:', error)
+          router.push('/auth/login')
+        } else {
+          router.push('/dashboard') // redirect only after session is set
+        }
       } else {
-        router.push("/auth/login");
+        router.push('/auth/login')
       }
-    };
+    }
 
-    process();
-  }, [dispatch, router]);
+    handleAuth()
+  }, [router])
 
-  return <p className="flex items-center justify-center">Finishing login...</p>;
+  return <p>Loading...</p>
 }

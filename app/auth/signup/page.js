@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,80 +26,43 @@ export default function SignupPage() {
   const [hasMinLength, setHasMinLength] = useState(false);
   const router = useRouter();
 
+  const handleSignup = async (e) => {
+    e.preventDefault();
 
- const handleSignup = async (e) => {
-  e.preventDefault();
+    if (!email || email.trim() === "" || email.includes(" ")) {
+      setError({ email: true });
+      toast.error("Enter a valid email address.");
+      return;
+    }
+    if (!password || password.length < 6) {
+      setError({ password: true });
+      toast.error("Password must be at least 6 characters.");
+      return;
+    }
+    if (!acceptedTerms) {
+      toast.error("You must accept the Terms and Conditions to continue.");
+      return;
+    }
 
-  if (!email || email.trim() === "" || email.includes(" ")) {
-    setError({ email: true });
-    toast.error("Enter a valid email address.");
-    return;
-  }
-  if (!password || password.length < 6) {
-    setError({ password: true });
-    toast.error("Password must be at least 6 characters.");
-    return;
-  }
-  if (!acceptedTerms) {
-    toast.error("You must accept the Terms and Conditions to continue.");
-    return;
-  }
+    setLoading(true);
 
-  setLoading(true);
-
-  // 1. Check if user already exists
-  const res = await fetch("/api/checkuser", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-
-  const { exists } = await res.json();
-
-  if (exists) {
-    toast.error("Email already registered. Please sign in instead.");
-    setLoading(false);
-    return;
-  }
-
-  // 2. Proceed with Supabase signup
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${window.location.origin}/dashboard`,
-    },
-  });
-
-  if (error) {
-    toast.error(error.message);
-    setLoading(false);
-    return;
-  }
-
-  if (!data.user) {
-    // fallback safety check
-    toast.error("Something went wrong. Please try again.");
-    setLoading(false);
-    return;
-  }
-
-  // Store email for verify screen
-  localStorage.setItem("email", email);
-
-  toast.success("Signup successful! Please verify your email.");
-  router.push("/auth/verifymail");
-  setLoading(false);
-};
-
-
+    // calling signup api
+    const res = await fetch("/api/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (data.error) toast.error(data.error);
+    else {
+      toast.success("Signup successful! Please verify your email.");
+      router.push(`/auth/verifymail?email=${encodeURIComponent(email)}`);
+      setLoading(false);
+    }
+  };
 
   const handleGoogleLogin = async () => {
-    await supabase.auth
-      .signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
-      });
+    window.location.href = "/api/oauth";
   };
 
   return (
@@ -119,12 +81,18 @@ export default function SignupPage() {
         "
       >
         {/* Top glow bar */}
-        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent blur-sm" />
+        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-[60%] h-px bg-gradient-to-r from-transparent via-zinc-100 to-transparent blur-sm" />
 
         {/* Card content */}
         <div className="relative text-center space-y-1">
           <div className="mx-auto size-12 rounded-xl bg-primary/20 ring-1 ring-border/50 flex items-center justify-center shadow-lg">
-            <Image src="/logo.svg" alt="Logo"  width={24} height={24} className="size-6" />
+            <Image
+              src="/logo.svg"
+              alt="Logo"
+              width={24}
+              height={24}
+              className="size-6"
+            />
           </div>
           <h2 className="text-3xl font-semibold text-white">
             Create your account
@@ -177,7 +145,7 @@ export default function SignupPage() {
                 )}
                 <button
                   type="button"
-                  className="text-gray-500 hover:text-white bg-gray-700/50 hover:bg-gray-700/70 rounded-full size-6 flex items-center justify-center"
+                  className="text-zinc-500 hover:text-white bg-zinc-700/50 hover:bg-zinc-700/70 rounded-full size-6 flex items-center justify-center cursor-pointer"
                   onClick={() => setShowPasswordCriteria(!showPasswordCriteria)}
                 >
                   <Info className="size-4" />
@@ -225,7 +193,7 @@ export default function SignupPage() {
           </div>
           {/* Password criteria popup */}
           {showPasswordCriteria && (
-            <div className="absolute top-full left-0 mt-1 w-full p-3 bg-background/92 text-sm rounded-md shadow-lg border border-gray-700 z-10">
+            <div className="absolute top-full left-0 mt-1 w-full p-3 bg-background/90 backdrop-filter backdrop-blur-sm text-sm rounded-md shadow-lg border border-gray-700 z-10">
               <p className="mb-1 font-semibold text-gray-300">
                 Password must contain:
               </p>
@@ -255,7 +223,7 @@ export default function SignupPage() {
             type="checkbox"
             checked={acceptedTerms}
             onChange={(e) => setAcceptedTerms(e.target.checked)}
-            className="mt-0.5 size-4 rounded border-white/20 bg-white/5"
+            className="mt-1 size-4 rounded accent-black"
           />
           I agree to the{" "}
           <a href="#" className="underline ml-1 hover:text-white">
@@ -274,7 +242,7 @@ export default function SignupPage() {
 
         <div className="relative flex items-center justify-center">
           <span className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-          <span className="relative z-10 mx-3 rounded-full px-3 py-0.5 text-xs text-gray-300">
+          <span className="relative z-2 mx-3 rounded-full px-3 py-0.5 text-xs text-gray-300">
             OR
           </span>
           <span className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
