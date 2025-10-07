@@ -10,7 +10,7 @@ export async function POST(request) {
     type: "signup",
     email,
     options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_BASE_URL}/api/callback`,
+      redirectTo: `${process.env.NEXT_PUBLIC_BASE_URL}/auth/callback`,
     },
   });
 
