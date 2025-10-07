@@ -8,11 +8,11 @@ const MonacoEditor = ({ activeTab }) => {
   React.useEffect(() => {
     if (monaco) {
       monaco.editor.defineTheme("my-dark", {
-        base: "vs-dark", // can also be "vs" or "hc-black"
+        base: "vs-dark",
         inherit: true,
         rules: [],
         colors: {
-          "editor.background": "#18181e", // 👈 your custom bg
+          "editor.background": "#18181e",
         },
       });
       monaco.editor.setTheme("my-dark");

@@ -59,6 +59,7 @@ export const config = {
     "/",
     "/auth/:path*",
     "/dashboard/:path*",
+    "/project/:path*",
     "/projects/:path*",
     "/messages/:path*",
     "/settings/:path*",
