@@ -19,20 +19,13 @@ export default function JoinProjectPage() {
       toast.error("Project code must be 8 hex characters");
       return;
     }
-    // const { data: { user }, error } = await supabase.auth.getUser();
 
     setIsLoading(true);
     try {
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
-
-      const res = await fetch("/api/join", {
+      const res = await fetch("/api/project/join", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({ joinCode: projectCode }),
       });

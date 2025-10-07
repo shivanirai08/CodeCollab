@@ -44,40 +44,29 @@ export default function CreateProjectPage() {
     setIsLoading(true);
 
     try{
+      const res = await fetch("/api/project/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(formData),
+    });
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error("You must be logged in to create a project");
-        setIsLoading(false);
-        return;
-      }
-      const { data, error } = await supabase
-        .from('projects')
-        .insert([
-          {
-            title: formData.projectName,
-            description: formData.description,
-            visibility: formData.visibility,
-            template: formData.template,
-            language: formData.language,
-            owner_id: user.id,
-          },
-        ])
-        .select()
-        .single();
-      if (data) {
-        toast.success(`Project "${data.title}" created successfully!`);
-        setFormData({
-          projectName: "",
-          description: "",
-          visibility: "private",
-          template: "blank",
-          language: "html",
-        });
-        setIsLoading(false);
-        console.log("Created project:", data);
-      }
-      if (error) throw error;
+    const data = await res.json();
+
+    if (!res.ok) {
+      toast.error(data.error || "Failed to create project");
+      return;
+    }
+
+    toast.success(`Project "${data.data.title}" created successfully!`);
+    console.log("Created project:", data.data);
+
+    setFormData({
+      projectName: "",
+      description: "",
+      visibility: "private",
+      template: "blank",
+      language: "html",
+    });
     } catch (err) {
       toast.error("Failed to create project. Please try again.");
     } finally {
