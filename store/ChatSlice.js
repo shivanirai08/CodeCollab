@@ -4,8 +4,8 @@ const initialState = {
   isChatOpen: false,
 };
 
-const uiSlice = createSlice({
-  name: "ui",
+const ChatSlice = createSlice({
+  name: "chat",
   initialState,
   reducers: {
     toggleChatPanel: (state) => {
@@ -20,7 +20,7 @@ const uiSlice = createSlice({
   },
 });
 
-export const { toggleChatPanel, openChatPanel, closeChatPanel } = uiSlice.actions;
-export default uiSlice.reducer;
+export const { toggleChatPanel, openChatPanel, closeChatPanel } = ChatSlice.actions;
+export default ChatSlice.reducer;
 
 

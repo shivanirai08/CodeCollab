@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { FiMessageSquare } from "react-icons/fi";
 import { useState } from "react";
 import SharePanel from "./SharePanel";
+import { useSelector } from "react-redux";
 
 
 export default function TopBar({ onToggleChat, isChatOpen }) {
+  const project = useSelector((state) => state.project);
   const[isShareOpen, setIsShareOpen] = useState(false);
 
   const dummyProject = {
@@ -23,7 +25,7 @@ export default function TopBar({ onToggleChat, isChatOpen }) {
     <div className="flex items-center justify-between px-4 pt-6 pb-2">
       {/* Left: Project Name */}
       <div className="text-xl font-semibold text-[var(--foreground)]">
-        Project Name
+        {project.projectname}
       </div>
 
       {/* Right Side: Avatars, Chat Icon, Share Button */}

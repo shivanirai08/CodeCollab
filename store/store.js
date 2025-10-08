@@ -1,9 +1,13 @@
 import { configureStore } from "@reduxjs/toolkit";
-import uiReducer from "./uiSlice";
+import ChatReducer from "./ChatSlice";
+import ProjectReducer from "./ProjectSlice";
+import NodeSlice from "./NodeSlice";
 
 const store = configureStore({
   reducer: {
-    ui: uiReducer,
+    chat: ChatReducer,
+    project: ProjectReducer,
+    node: NodeSlice,
   },
 });
 

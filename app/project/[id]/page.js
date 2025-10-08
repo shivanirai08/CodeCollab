@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useDispatch } from "react-redux";
+import { fetchProject } from "@/store/ProjectSlice";
 import { cn } from "@/lib/utils";
 import { Terminal, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,11 +12,20 @@ import MonacoEditor from "./components/Editor";
 import Tab from "./components/EditorTabs";
 import ChatPanel from "./components/ChatPanel";
 import TerminalPanel from "./components/Terminal";
+import {useParams} from "next/navigation";
 
 export default function ProjectWorkspacePage() {
+  const params = useParams();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("index.html");
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const projectId =  params.id;
+
+  const dispatch = useDispatch();
+  useEffect(()=>{
+    dispatch(fetchProject(projectId));
+    console.log(projectId);
+  },[dispatch, projectId])
 
   return (
     <div className="flex h-screen bg-background">
