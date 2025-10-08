@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { X} from "lucide-react";
 
 
-export default function ChatPanel({isChatOpen, setIsChatOpen}) {
+export default function ChatPanel({isChatOpen}) {
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState("");
 

@@ -3,11 +3,8 @@ import { NextResponse } from "next/server";
 
 export async function POST(req) {
   try {
-    const supabase = await createClient();
+    const supabase = createClient();
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    console.log("Supabase user:", user);
-    if (userError) console.error("User fetch error:", userError);
 
     const currentUserId = user?.id;
     const { joinCode } = await req.json();
@@ -39,7 +36,6 @@ export async function POST(req) {
       .maybeSingle();
 
     if (projectError) {
-      console.error("Project lookup failed:", projectError);
       return NextResponse.json(
         { error: "Project lookup failed" },
         { status: 400 }
@@ -85,7 +81,6 @@ export async function POST(req) {
         });
 
       if (insertError) {
-        console.error("Insert error:", insertError);
         return NextResponse.json(
           { error: "Failed to join project" },
           { status: 400 }
@@ -125,7 +120,6 @@ export async function POST(req) {
       message: "Request sent to owner",
     });
   } catch (err) {
-    console.error("/api/join error:", err);
     return NextResponse.json(
       { error: "Something went wrong" },
       { status: 500 }

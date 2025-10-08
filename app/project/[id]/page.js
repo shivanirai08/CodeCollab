@@ -9,10 +9,12 @@ import TopBar from "./components/TopBar";
 import MonacoEditor from "./components/Editor";
 import Tab from "./components/EditorTabs";
 import ChatPanel from "./components/ChatPanel";
+import TerminalPanel from "./components/Terminal";
 
 export default function ProjectWorkspacePage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("index.html");
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
 
   return (
     <div className="flex h-screen bg-background">
@@ -20,7 +22,7 @@ export default function ProjectWorkspacePage() {
       <FileSidebar />
 
       {/* Main content area */}
-      <main className="flex-1 overflow-y-auto pb-4">
+      <main className="flex-1 overflow-y-auto pb-2">
         <div className="flex h-full flex-col">
           <TopBar
             onToggleChat={() => setIsChatOpen((v) => !v)}
@@ -59,7 +61,7 @@ export default function ProjectWorkspacePage() {
                     size="sm"
                     className="text-[#C9C9D6] hover:text-white hover:bg-[#1A1A20] px-2 py-1"
                     onClick={() => {
-                      // Terminal functionality
+                      setIsTerminalOpen(true);
                       console.log("Open terminal");
                     }}
                   >
@@ -83,6 +85,10 @@ export default function ProjectWorkspacePage() {
               <div className="relative flex-1 w-full bg-[#202026] min-w-0 overflow-hidden rounded-sm">
                 <div className="relative w-full bg-[#0B0B0F] h-full">
                   <MonacoEditor activeTab={activeTab}/>
+                <TerminalPanel
+                  isOpen={isTerminalOpen}
+                  onClose={() => setIsTerminalOpen(false)}
+                />
                 </div>
               </div>
             </div>
@@ -92,6 +98,9 @@ export default function ProjectWorkspacePage() {
           </div>
         </div>
       </main>
+
+      
+
     </div>
   );
 }

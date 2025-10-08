@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { FiCrosshair } from "react-icons/fi";
+import { RxCross2 } from "react-icons/rx";
 
 export default function Tab({ name, active, onClick }) {
   return (
@@ -15,7 +15,7 @@ export default function Tab({ name, active, onClick }) {
       )}
     >
       <span>{name}</span>
-      <span className="opacity-60"><FiCrosshair/></span>
+      <span className="opacity-60"><RxCross2 /></span>
     </div>
   );
 }

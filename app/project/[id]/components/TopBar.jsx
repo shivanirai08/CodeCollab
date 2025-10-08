@@ -2,9 +2,23 @@
 
 import { Button } from "@/components/ui/button";
 import { FiMessageSquare } from "react-icons/fi";
+import { useState } from "react";
+import SharePanel from "./SharePanel";
 
 
 export default function TopBar({ onToggleChat, isChatOpen }) {
+  const[isShareOpen, setIsShareOpen] = useState(false);
+
+  const dummyProject = {
+    code: "a1b2c3d4",
+    owner: { name: "Shivani Rai", email: "shivani@devmail.com", initials: "SR" },
+    collaborators: [
+      { id: 1, name: "Karan Mehta", initials: "KM" },
+      { id: 2, name: "Priya S.", initials: "PS" },
+    ],
+    viewers: [{ id: 3, name: "Rohan", initials: "R" }],
+  };
+
   return (
     <div className="flex items-center justify-between px-4 pt-6 pb-2">
       {/* Left: Project Name */}
@@ -35,10 +49,16 @@ export default function TopBar({ onToggleChat, isChatOpen }) {
         </Button>
 
         {/* Share Button */}
-        <Button className="bg-gradient-to-b from-[#FFF] to-[#6B696D] px-6">
+        <Button className="bg-gradient-to-b from-[#FFF] to-[#6B696D] px-6" onClick={() => setIsShareOpen(true)}>
           Share
         </Button>
       </div>
+
+      <SharePanel
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
+        project={dummyProject}
+      />
     </div>
   );
 }
