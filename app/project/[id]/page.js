@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
-import { fetchProject } from "@/store/ProjectSlice";
+import { fetchProject, memberProject } from "@/store/ProjectSlice";
 import { cn } from "@/lib/utils";
 import { Terminal, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ export default function ProjectWorkspacePage() {
   const dispatch = useDispatch();
   useEffect(()=>{
     dispatch(fetchProject(projectId));
-    console.log(projectId);
+    dispatch(memberProject(projectId));
   },[dispatch, projectId])
 
   return (

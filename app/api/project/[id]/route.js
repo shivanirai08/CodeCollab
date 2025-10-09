@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(req, { params: paramsPromise }) {
   try {
     const { id } = await paramsPromise;
-    const supabase = await createClient();
+    const supabase = createClient();
 
     if (!id) {
       return NextResponse.json({ error: "Project ID is required" }, { status: 400 });

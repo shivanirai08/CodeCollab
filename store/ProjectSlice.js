@@ -29,7 +29,7 @@ export const fetchProject = createAsyncThunk("project/fetchProject",
 export const memberProject = createAsyncThunk("project/memberProject",
     async(projectid, { rejectWithValue }) => {
         try{
-            const res = await fetch(`/api/project/role/${projectid}`);
+            const res = await fetch(`/api/project/members/${projectid}`);
             const data = await res.json();
             return data;
         }catch(error){
@@ -74,7 +74,6 @@ const projectSlice = createSlice({
         state.status = "succeeded";
         state.owner = action.payload.owner;
         state.collaborators = action.payload.collaborators;
-        state.viewers = action.payload.viewers;
       })
       .addCase(memberProject.rejected, (state, action) => {
         state.status = "failed";

@@ -121,7 +121,7 @@ export async function POST(req) {
     });
   } catch (err) {
     return NextResponse.json(
-      { error: "Something went wrong" },
+      { error: err.message || "Something went wrong" },
       { status: 500 }
     );
   }

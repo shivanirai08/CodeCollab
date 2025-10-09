@@ -1,17 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { X, Copy, User, Users } from "lucide-react";
+import { X, Copy, Users, EllipsisVertical} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useSelector } from "react-redux";
 
-export default function SharePanel({ isOpen, onClose, project }) {
-  if (!isOpen) return null;
+export default function SharePanel({ isOpen, onClose }) {
+  const project_code = useSelector((state) => state.project.join_code);
+  const owner = useSelector((state) => state.project.owner);
+  const collaborators = useSelector((state) => state.project.collaborators);
 
   const [copied, setCopied] = useState(false);
+  if (!isOpen) return null;
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(project?.code || "");
+    await navigator.clipboard.writeText(project_code || "");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -32,33 +36,33 @@ export default function SharePanel({ isOpen, onClose, project }) {
           </Button>
         </div>
 
-        {/* Project Code Section */}
+        {/* Project Code */}
         <div className="bg-[#23232A] border border-[#303036] rounded-lg py-2 px-4 mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
-          <div className="text-sm text-gray-400 mb-1">Project Code</div>
-          <span className="font-mono text-lg">{project?.code}</span>
+            <div className="text-sm text-gray-400 mb-1">Project Code</div>
+            <span className="font-mono text-lg">{project_code}</span>
           </div>
           <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCopy}
-              className="text-gray-300 hover:text-white"
-            >
-              <Copy className="h-4 w-4 mr-1" />
-              {copied ? "Copied!" : "Copy"}
+            variant="ghost"
+            size="sm"
+            onClick={handleCopy}
+            className="text-gray-300 hover:text-white"
+          >
+            <Copy className="h-4 w-4" />
+            {copied ? "Copied!" : "Copy"}
           </Button>
         </div>
 
-        {/* Owner Info */}
+        {/* Owner */}
         <div className="mb-6">
           <div className="text-sm text-gray-400 mb-1">Owner</div>
           <div className="flex items-center gap-3 bg-[#23232A] border border-[#303036] rounded-lg p-3">
             <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold">
-              {project?.owner?.initials}
+              {owner?.username?.[0]?.toUpperCase() || "O"}
             </div>
             <div>
-              <div className="font-semibold">{project?.owner?.name}</div>
-              <div className="text-sm text-gray-400">{project?.owner?.email}</div>
+              <div className="font-semibold">{owner?.username}</div>
+              <div className="text-sm text-gray-400">{owner?.email}</div>
             </div>
           </div>
         </div>
@@ -68,45 +72,34 @@ export default function SharePanel({ isOpen, onClose, project }) {
           <div className="flex items-center gap-2 text-sm text-gray-400 mb-2">
             <Users className="h-4 w-4" /> Collaborators
           </div>
-          <div className="flex flex-wrap gap-3">
-            {project?.collaborators?.length ? (
-              project.collaborators.map((user) => (
+          <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+            {collaborators?.length ? (
+              collaborators.map((user) => (
                 <div
-                  key={user.id}
-                  className="flex items-center gap-2 bg-[#23232A] border border-[#303036] rounded-full px-3 py-1"
+                  key={user.user_id}
+                  className="flex items-center justify-between rounded-lg px-3 py-2 group hover:bg-[#23232A]"
                 >
-                  <div className="w-6 h-6 rounded-full bg-green-600 flex items-center justify-center text-xs font-bold">
-                    {user.initials}
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center font-bold text-xs">
+                      {user?.username?.[0]?.toUpperCase() || "C"}
+                    </div>
+                    <div className="flex flex-col text-sm">
+                      <span className="font-medium">{user.username}</span>
+                      <span className="text-gray-400">{user.email}</span>
+                    </div>
                   </div>
-                  <span className="text-sm">{user.name}</span>
+                  <EllipsisVertical className="h-4 w-4 group-hover:block hidden group-hover:cursor-pointer" />
+                  {/* <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleRemove(user.user_id)}
+                  >
+                    Remove
+                  </Button> */}
                 </div>
               ))
             ) : (
               <div className="text-gray-500 text-sm">No collaborators yet</div>
-            )}
-          </div>
-        </div>
-
-        {/* Viewers */}
-        <div>
-          <div className="flex items-center gap-2 text-sm text-gray-400 mb-2">
-            <User className="h-4 w-4" /> Viewers
-          </div>
-          <div className="flex flex-wrap gap-3">
-            {project?.viewers?.length ? (
-              project.viewers.map((user) => (
-                <div
-                  key={user.id}
-                  className="flex items-center gap-2 bg-[#23232A] border border-[#303036] rounded-full px-3 py-1"
-                >
-                  <div className="w-6 h-6 rounded-full bg-gray-500 flex items-center justify-center text-xs font-bold">
-                    {user.initials}
-                  </div>
-                  <span className="text-sm">{user.name}</span>
-                </div>
-              ))
-            ) : (
-              <div className="text-gray-500 text-sm">No viewers yet</div>
             )}
           </div>
         </div>

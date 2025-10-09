@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 
 export async function POST(req) {
   try {
-    const { email, password } = await req.json()
+    const { username, email, password } = await req.json()
 
     // 1. Service role client to query the users table
     const supabaseAdmin = createClient(
@@ -38,7 +38,10 @@ export async function POST(req) {
       password,
       options: {
         emailRedirectTo: `${process.env.NEXT_PUBLIC_BASE_URL}/auth/callback`,
-      }
+      data: {
+        username,
+      },
+    }
     })
 
     if (signupError) {

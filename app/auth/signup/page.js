@@ -10,6 +10,7 @@ import { EyeClosed, Eye, Info } from "lucide-react";
 import Image from "next/image";
 
 export default function SignupPage() {
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -28,6 +29,11 @@ export default function SignupPage() {
 
   const handleSignup = async (e) => {
     e.preventDefault();
+
+    if (!username || username.trim() === "") {
+      toast.error("Username is required.");
+      return;
+    }
 
     if (!email || email.trim() === "" || email.includes(" ")) {
       setError({ email: true });
@@ -50,7 +56,7 @@ export default function SignupPage() {
     const res = await fetch("/api/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ username, email, password }),
     });
     const data = await res.json();
     if (data.error) toast.error(data.error);
@@ -103,7 +109,7 @@ export default function SignupPage() {
         </div>
 
         <div className="relative space-y-3">
-          {/* <div className="text-left">
+          <div className="text-left">
             <label className="text-sm text-gray-400">Username</label>
             <Input
               placeholder="johndoe"
@@ -111,7 +117,7 @@ export default function SignupPage() {
               onChange={(e) => setUsername(e.target.value)}
               className="mt-1 bg-white/5 border-white/20 placeholder:text-gray-500 text-white"
             />
-          </div> */}
+          </div>
           <div className="text-left">
             <label className="text-sm text-gray-400">Email</label>
             <Input

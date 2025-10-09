@@ -11,16 +11,6 @@ export default function TopBar({ onToggleChat, isChatOpen }) {
   const project = useSelector((state) => state.project);
   const[isShareOpen, setIsShareOpen] = useState(false);
 
-  const dummyProject = {
-    code: "a1b2c3d4",
-    owner: { name: "Shivani Rai", email: "shivani@devmail.com", initials: "SR" },
-    collaborators: [
-      { id: 1, name: "Karan Mehta", initials: "KM" },
-      { id: 2, name: "Priya S.", initials: "PS" },
-    ],
-    viewers: [{ id: 3, name: "Rohan", initials: "R" }],
-  };
-
   return (
     <div className="flex items-center justify-between px-4 pt-6 pb-2">
       {/* Left: Project Name */}
@@ -59,7 +49,6 @@ export default function TopBar({ onToggleChat, isChatOpen }) {
       <SharePanel
         isOpen={isShareOpen}
         onClose={() => setIsShareOpen(false)}
-        project={dummyProject}
       />
     </div>
   );
