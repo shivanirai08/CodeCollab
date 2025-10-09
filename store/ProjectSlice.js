@@ -2,7 +2,7 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 
 const initialState = {
   projectid: "",
-  projectname: "",
+  projectname: "Project",
   description: "",
   visibility: "",
   template: "",
