@@ -3,29 +3,34 @@
 import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import { fetchProject, memberProject } from "@/store/ProjectSlice";
+import { fetchNodes } from "@/store/NodesSlice";
 import { cn } from "@/lib/utils";
 import { Terminal, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import FileSidebar from "./components/FileSidebar";
 import TopBar from "./components/TopBar";
 import MonacoEditor from "./components/Editor";
-import Tab from "./components/EditorTabs";
+import EditorTabs from "./components/EditorTabs";
 import ChatPanel from "./components/ChatPanel";
 import TerminalPanel from "./components/Terminal";
 import {useParams} from "next/navigation";
 
 export default function ProjectWorkspacePage() {
   const params = useParams();
+  const projectId = params.id;
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    if (projectId) {
+      dispatch(fetchProject(projectId));
+      dispatch(memberProject(projectId));
+      dispatch(fetchNodes(projectId)); // Add this
+    }
+  }, [dispatch, projectId]);
+
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("index.html");
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
-  const projectId =  params.id;
-
-  const dispatch = useDispatch();
-  useEffect(()=>{
-    dispatch(fetchProject(projectId));
-    dispatch(memberProject(projectId));
-  },[dispatch, projectId])
 
   return (
     <div className="flex h-screen bg-background">
@@ -51,21 +56,7 @@ export default function ProjectWorkspacePage() {
             >
               {/* Tabs */}
               <div className="flex items-center gap-2 border-b border-[#36363E] px-3 mb-2 min-w-0 overflow-hidden">
-                <Tab
-                  name="index.html"
-                  onClick={() => setActiveTab("index.html")}
-                  active={activeTab}
-                />
-                <Tab
-                  name="style.css"
-                  onClick={() => setActiveTab("style.css")}
-                  active={activeTab}
-                />
-                <Tab
-                  name="script.js"
-                  onClick={() => setActiveTab("script.js")}
-                  active={activeTab}
-                />
+                <EditorTabs />
                 <div className="ml-auto flex items-center gap-2">
                   <Button
                     variant="ghost"

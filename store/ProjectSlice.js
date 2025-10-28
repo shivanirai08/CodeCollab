@@ -10,7 +10,6 @@ const initialState = {
   join_code: "",
   owner: "",
   collaborators: [],
-  viewers: [],
 };
 
 // Async Thunk
