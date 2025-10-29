@@ -13,7 +13,7 @@ import MonacoEditor from "./components/Editor";
 import EditorTabs from "./components/EditorTabs";
 import ChatPanel from "./components/ChatPanel";
 import TerminalPanel from "./components/Terminal";
-import {useParams} from "next/navigation";
+import { useParams } from "next/navigation";
 
 export default function ProjectWorkspacePage() {
   const params = useParams();
@@ -24,12 +24,11 @@ export default function ProjectWorkspacePage() {
     if (projectId) {
       dispatch(fetchProject(projectId));
       dispatch(memberProject(projectId));
-      dispatch(fetchNodes(projectId)); // Add this
+      dispatch(fetchNodes(projectId));
     }
   }, [dispatch, projectId]);
 
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("index.html");
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
 
   return (
@@ -51,11 +50,11 @@ export default function ProjectWorkspacePage() {
             <div
               className={cn(
                 "flex h-full flex-1 flex-col bg-[#121217] transition-all duration-300 min-w-0",
-                isChatOpen ? "w-[calc(100%-18rem)] pr-4" : "w-full" // shrink when chat opens
+                isChatOpen ? "w-[calc(100%-18rem)] pr-4" : "w-full"
               )}
             >
               {/* Tabs */}
-              <div className="flex items-center gap-2 border-b border-[#36363E] px-3 mb-2 min-w-0 overflow-hidden">
+              <div className="flex items-center gap-2 border-b border-[#36363E] mb-2 min-w-0 overflow-hidden">
                 <EditorTabs />
                 <div className="ml-auto flex items-center gap-2">
                   <Button
@@ -74,7 +73,6 @@ export default function ProjectWorkspacePage() {
                     size="sm"
                     className="text-[#C9C9D6] hover:text-white hover:bg-[#1A1A20] px-2 py-1"
                     onClick={() => {
-                      // Run code functionality
                       console.log("Run code");
                     }}
                   >
@@ -86,23 +84,20 @@ export default function ProjectWorkspacePage() {
               {/* Editor area */}
               <div className="relative flex-1 w-full bg-[#202026] min-w-0 overflow-hidden rounded-sm">
                 <div className="relative w-full bg-[#0B0B0F] h-full">
-                  <MonacoEditor activeTab={activeTab}/>
-                <TerminalPanel
-                  isOpen={isTerminalOpen}
-                  onClose={() => setIsTerminalOpen(false)}
-                />
+                  <MonacoEditor />
+                  <TerminalPanel
+                    isOpen={isTerminalOpen}
+                    onClose={() => setIsTerminalOpen(false)}
+                  />
                 </div>
               </div>
             </div>
 
             {/* Right: Chat panel */}
-            <ChatPanel isChatOpen={isChatOpen}/>
+            <ChatPanel isChatOpen={isChatOpen} />
           </div>
         </div>
       </main>
-
-      
-
     </div>
   );
 }

@@ -17,13 +17,14 @@ import FileItem from "./FileItem"
 import FolderItem from "./FolderItem"
 import InlineInput from "./InlineInput"
 import ContextMenu from "./ContextMenu"
-import { toast } from "sonner" // Add this
+import { toast } from "sonner"
 
 export default function FileSidebar({ className }) {
   const dispatch = useDispatch()
   const params = useParams()
   const projectId = params.id
 
+  const project = useSelector((state) => state.project)
   const nodes = useSelector((state) => state.nodes.nodes)
   const activeFileId = useSelector((state) => state.nodes.activeFileId)
 
@@ -76,20 +77,26 @@ export default function FileSidebar({ className }) {
 
     const language =
       creatingNode.type === "file"
-        ? name.endsWith(".js") || name.endsWith(".jsx")
-          ? "javascript"
-          : name.endsWith(".ts") || name.endsWith(".tsx")
-          ? "typescript"
-          : name.endsWith(".css")
-          ? "css"
-          : name.endsWith(".html")
-          ? "html"
-          : name.endsWith(".json")
-          ? "json"
-          : name.endsWith(".py")
-          ? "python"
-          : "plaintext"
-        : null
+      ? name.endsWith(".js") || name.endsWith(".jsx")
+      ? "javascript"
+      : name.endsWith(".ts") || name.endsWith(".tsx")
+      ? "typescript"
+      : name.endsWith(".css")
+      ? "css"
+      : name.endsWith(".html")
+      ? "html"
+      : name.endsWith(".json")
+      ? "json"
+      : name.endsWith(".c")
+      ? "c"
+      : name.endsWith(".cpp")
+      ? "cpp"
+      : name.endsWith(".java")
+      ? "java"
+      : name.endsWith(".py")
+      ? "python"
+      : "plaintext"
+    : null;
 
     try {
       await dispatch(
@@ -160,7 +167,7 @@ export default function FileSidebar({ className }) {
       <aside
         className={cn(
           "flex h-screen flex-col border-r border-r-[#36363E] bg-[#141419] transition-all duration-300 relative",
-          collapsed ? "w-16" : "w-64",
+          collapsed ? "w-16" : "w-56",
           className
         )}
       >
@@ -173,7 +180,7 @@ export default function FileSidebar({ className }) {
         {/* Files */}
         <div className="flex-1 overflow-y-auto p-2 text-sm text-[#C9C9D6]">
           <div className="mb-4 flex items-center justify-between border-b border-[#36363E] pb-2">
-            <div className="text-xs uppercase tracking-wide text-[#8D8D98] px-2">Files</div>
+            <div className="text-xs uppercase tracking-wide text-[#8D8D98] px-2"> {project.projectname || "Files"}</div>
             {!collapsed && (
               <div className="flex gap-1">
                 <Button

@@ -22,14 +22,12 @@ export default function EditorTabs() {
 
   if (openFileNodes.length === 0) {
     return (
-      <div className="flex items-center border-b border-[#36363E] bg-[#0F0F14] px-4 py-2 text-sm text-[#8D8D98]">
-        No files open
-      </div>
+      <></>
     );
   }
 
   return (
-    <div className="flex items-center border-b border-[#36363E] bg-[#0F0F14] overflow-x-auto">
+    <div className="flex items-center bg-white/2 overflow-x-auto rounded-t-sm">
       {openFileNodes.map((file) => (
         <Tab
           key={file.id}
@@ -48,10 +46,10 @@ function Tab({ file, active, onClick, onClose }) {
     <div
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 px-4 py-2 text-sm cursor-pointer border-r border-[#36363E] group",
+        "flex items-center gap-2 px-4 py-2 text-sm cursor-pointer border-r group rounded-t-sm",
         active
-          ? "text-white bg-[#1A1A20]"
-          : "text-[#C9C9D6] hover:bg-[#141419]"
+          ? "text-white bg-white/7 border-[#36363E]"
+          : "text-[#C9C9D6] hover:bg-white/4 border-[#242325]"
       )}
     >
       <span>{file.name}</span>

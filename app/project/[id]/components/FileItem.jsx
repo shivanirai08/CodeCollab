@@ -10,7 +10,9 @@ import {
 export default function FileItem({ file, collapsed, active, onClick, onContextMenu }) {
   const getFileIcon = () => {
     const name = file.name.toLowerCase()
-    if (name.endsWith(".html")) {
+    if (name.endsWith(".c") || name.endsWith(".cpp") || name.endsWith(".java") || name.endsWith(".py")) {
+      return <HiOutlineCode size={16} className="text-blue-400" />
+    } else if (name.endsWith(".html")) {
       return <HiOutlineDocumentText size={16} className="text-orange-400" />
     } else if (name.endsWith(".css")) {
       return <HiOutlinePhotograph size={16} className="text-blue-400" />
