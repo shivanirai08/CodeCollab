@@ -34,7 +34,7 @@ export async function GET(req, { params }) {
 
 export async function PATCH(req, { params }) {
   try {
-    const { nodeId } = params;
+    const { nodeId } = await params;
     const updates = await req.json();
 
     if (!nodeId) {

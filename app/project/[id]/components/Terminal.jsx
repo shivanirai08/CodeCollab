@@ -1,79 +1,173 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { X, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { X, Play, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { useSelector } from "react-redux";
+import { toast } from "sonner";
 
 export default function TerminalPanel({ isOpen, onClose }) {
-  const [logs, setLogs] = useState([
-    "Terminal started...",
-    "Type a command below or run code.",
-  ]);
+  const [output, setOutput] = useState([]);
   const [input, setInput] = useState("");
-  const [collapsed, setCollapsed] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const outputRef = useRef(null);
 
-  const logsEndRef = useRef(null);
+  const activeFileId = useSelector((state) => state.nodes.activeFileId);
+  const nodes = useSelector((state) => state.nodes.nodes);
+  const fileContents = useSelector((state) => state.nodes.fileContents);
+
+  const activeFile = nodes.find((n) => n.id === activeFileId);
 
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs]);
+    if (outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+    }
+  }, [output]);
 
-  if (!isOpen) return null;
+  const getLanguageFromFileName = (fileName) => {
+    if (!fileName) return "javascript";
 
-  const handleCommand = (cmd) => {
-    if (!cmd.trim()) return;
+    const ext = fileName.split(".").pop()?.toLowerCase();
+    const languageMap = {
+      js: "javascript",
+      jsx: "javascript",
+      ts: "typescript",
+      tsx: "typescript",
+      py: "python",
+      java: "java",
+      cpp: "cpp",
+      c: "c",
+      cs: "csharp",
+      go: "go",
+      rs: "rust",
+      php: "php",
+      rb: "ruby",
+      kt: "kotlin",
+      swift: "swift",
+      sql: "sql",
+      sh: "bash",
+      r: "r",
+    };
 
-    // Basic simulation (replace with backend execution later)
-    let output;
-    switch (cmd.trim().toLowerCase()) {
-      case "help":
-        output = "Available commands: help, clear, echo, run";
-        break;
-      case "clear":
-        setLogs([]);
-        return;
-      case "run":
-        output = "Running your code...";
-        break;
-      default:
-        output = `Command not found: ${cmd}`;
+    return languageMap[ext] || "javascript";
+  };
+
+  const handleRunCode = async () => {
+    if (!activeFileId || !activeFile) {
+      toast.error("No file selected");
+      return;
     }
 
-    setLogs((prev) => [...prev, `>>> ${cmd}`, output]);
+    const sourceCode = fileContents[activeFileId];
+    if (!sourceCode || sourceCode.trim() === "") {
+      toast.error("No code to execute");
+      return;
+    }
+
+    const language = getLanguageFromFileName(activeFile.name);
+    setIsExecuting(true);
+
+    // Add execution start message
+    setOutput((prev) => [
+      ...prev,
+      {
+        type: "info",
+        content: `Executing ${activeFile.name}...`,
+        timestamp: new Date().toLocaleTimeString(),
+      },
+    ]);
+
+    try {
+      const response = await fetch("/api/execute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sourceCode,
+          language,
+          stdin: input,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setOutput((prev) => [
+          ...prev,
+          {
+            type: "success",
+            content: result.output,
+            timestamp: new Date().toLocaleTimeString(),
+            time: result.time,
+            memory: result.memory,
+          },
+        ]);
+        toast.success("Code executed successfully");
+      } else {
+        setOutput((prev) => [
+          ...prev,
+          {
+            type: "error",
+            content: result.error || result.output,
+            timestamp: new Date().toLocaleTimeString(),
+          },
+        ]);
+        toast.error("Execution failed");
+      }
+    } catch (error) {
+      setOutput((prev) => [
+        ...prev,
+        {
+          type: "error",
+          content: `Error: ${error.message}`,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+      ]);
+      toast.error("Failed to execute code");
+    } finally {
+      setIsExecuting(false);
+      setInput("");
+    }
+  };
+
+  const handleClear = () => {
+    setOutput([]);
     setInput("");
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div
-      className={cn(
-        "absolute w-full z-10 bg-[#0F0F14] border border-[#2A2A32] text-white font-mono transition-all duration-300 rounded-t-md",
-        collapsed ? "h-12 bottom-0" : "h-64 bottom-2"
-      )}
-    >
+    <div className="absolute bottom-0 left-0 right-0 h-80 bg-[#0F0F14] border-t border-[#36363E] z-10 flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#1A1A20] border-b border-[#2A2A32] rounded-t-md">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <span className="text-[#8A8A95]">TERMINAL</span>
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[#36363E]">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-white">Terminal</span>
+          {activeFile && (
+            <span className="text-xs text-[#8D8D98]">{activeFile.name}</span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setCollapsed(!collapsed)}
-            className="text-gray-400 hover:text-white"
+            onClick={handleRunCode}
+            disabled={isExecuting || !activeFileId}
+            className="h-7 px-2 text-green-400 hover:text-green-300 hover:bg-[#1A1A20]"
           >
-            {collapsed ? (
-              <ChevronUp className="h-4 w-4" />
+            {isExecuting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <ChevronDown className="h-4 w-4" />
+              <Play className="h-4 w-4" />
             )}
+            <span className="ml-1 text-xs">Run</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setLogs([])}
-            className="text-gray-400 hover:text-white"
+            onClick={handleClear}
+            className="h-7 px-2 text-[#C9C9D6] hover:text-white hover:bg-[#1A1A20]"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -81,43 +175,65 @@ export default function TerminalPanel({ isOpen, onClose }) {
             variant="ghost"
             size="sm"
             onClick={onClose}
-            className="text-gray-400 hover:text-white"
+            className="h-7 px-2 text-[#C9C9D6] hover:text-white hover:bg-[#1A1A20]"
           >
             <X className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {/* Body */}
-      {!collapsed && (
-        <div className="flex flex-col h-[calc(100%-40px)]">
-          <div className="flex-1 overflow-y-auto px-4 py-2 text-sm">
-            {logs.map((line, i) => (
-              <div key={i} className="leading-6">
-                {line}
+      {/* Output area */}
+      <div
+        ref={outputRef}
+        className="flex-1 overflow-y-auto p-4 font-mono text-sm space-y-2"
+      >
+        {output.length === 0 ? (
+          <div className="text-[#8D8D98] text-center py-8">
+            Terminal output will appear here. Click "Run" to execute your code.
+          </div>
+        ) : (
+          output.map((item, index) => (
+            <div key={index} className="space-y-1">
+              <div className="flex items-center gap-2 text-xs text-[#8D8D98]">
+                <span>{item.timestamp}</span>
+                {item.time && <span>• Time: {item.time}s</span>}
+                {item.memory && <span>• Memory: {item.memory}KB</span>}
               </div>
-            ))}
-            <div ref={logsEndRef} />
-          </div>
+              <pre
+                className={`whitespace-pre-wrap ${
+                  item.type === "error"
+                    ? "text-red-400"
+                    : item.type === "info"
+                    ? "text-blue-400"
+                    : "text-green-400"
+                }`}
+              >
+                {item.content}
+              </pre>
+            </div>
+          ))
+        )}
+      </div>
 
-          {/* Input Bar */}
-          <div className="flex items-center border-t border-[#2A2A32] px-3 py-2 bg-[#15151B]">
-            <span className="text-[#4B4B55] mr-2">$</span>
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleCommand(input);
-                }
-              }}
-              placeholder="Enter command..."
-              className="flex-1 bg-transparent text-white outline-none text-sm"
-            />
-          </div>
+      {/* Input area */}
+      <div className="border-t border-[#36363E] p-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-[#8D8D98]">Input (stdin):</span>
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !isExecuting) {
+                handleRunCode();
+              }
+            }}
+            placeholder="Enter input for your program (optional)"
+            className="flex-1 bg-[#1A1A20] text-white text-sm px-3 py-1.5 rounded border border-[#36363E] focus:outline-none focus:border-[#4A4A52]"
+            disabled={isExecuting}
+          />
         </div>
-      )}
+      </div>
     </div>
   );
 }

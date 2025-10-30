@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export async function POST(request) {
   const { email } = await request.json();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Send verification email
   const { error } = await supabase.auth.resend({

@@ -10,7 +10,7 @@ const service = createClient(
 
 export async function GET(req, { params }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     
     if (!id) {
       return NextResponse.json({ error: "Project id required" }, { status: 400 });

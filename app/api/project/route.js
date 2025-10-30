@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function GET() {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Get the current logged-in user
     const {
@@ -32,14 +32,24 @@ export async function GET() {
       `)
       .eq("user_id", userId);
 
-    if (membershipsError) throw membershipsError;
+    if (membershipsError) {
+      console.error("Memberships error:", membershipsError);
+      throw membershipsError;
+    }
 
     if (!memberships?.length) {
       return NextResponse.json({ projects: [] });
     }
 
+    // Filter out null projects (deleted projects)
+    const validMemberships = memberships.filter((m) => m.projects !== null);
+
+    if (!validMemberships.length) {
+      return NextResponse.json({ projects: [] });
+    }
+
     // Extract project IDs
-    const projectIds = memberships.map((m) => m.project_id);
+    const projectIds = validMemberships.map((m) => m.project_id);
 
     // Fetch all members for these projects
     const { data: membersData, error: membersError } = await supabase
@@ -54,7 +64,10 @@ export async function GET() {
       `)
       .in("project_id", projectIds);
 
-    if (membersError) throw membersError;
+    if (membersError) {
+      console.error("Members error:", membersError);
+      throw membersError;
+    }
 
     // Organize members by project
     const membersByProject = membersData.reduce((acc, m) => {
@@ -77,19 +90,27 @@ export async function GET() {
     }, {});
 
     // Prepare final response
-    const projects = memberships.map((m) => {
-      const p = m.projects;
-      return {
-        id: p.id,
-        title: p.title,
-        thumbnail: p.thumbnail || null,
-        lastEditedText: p.updated_at
-          ? `Last edited ${new Date(p.updated_at).toLocaleDateString()}`
-          : null,
-        participants: membersByProject[p.id] || [],
-        role: m.role,
-      };
-    });
+    const projects = validMemberships
+      .map((m) => {
+        const p = m.projects;
+
+        // Double check that project exists
+        if (!p || !p.id) {
+          return null;
+        }
+
+        return {
+          id: p.id,
+          title: p.title || "Untitled Project",
+          thumbnail: p.thumbnail || null,
+          lastEditedText: p.updated_at
+            ? `Last edited ${new Date(p.updated_at).toLocaleDateString()}`
+            : "Never edited",
+          participants: membersByProject[p.id] || [],
+          role: m.role,
+        };
+      })
+      .filter((p) => p !== null); // Remove any null projects
 
     return NextResponse.json({ projects });
   } catch (err) {

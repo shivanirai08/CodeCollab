@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function POST(req) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const body = await req.json();
     const { projectName, description, visibility, template, language } = body;
 

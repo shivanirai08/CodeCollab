@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(req, { params }) {
   try {
     const { id } = params;
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Fetch all members for the project
     const { data, error } = await supabase

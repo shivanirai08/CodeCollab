@@ -33,7 +33,7 @@ export default function ProjectWorkspacePage() {
 
   return (
     <div className="flex h-screen bg-background">
-      {/* File sidebar (main navigation) */}
+      {/* File sidebar*/}
       <FileSidebar />
 
       {/* Main content area */}
@@ -57,7 +57,7 @@ export default function ProjectWorkspacePage() {
               <div className="flex items-center gap-2 border-b border-[#36363E] mb-2 min-w-0 overflow-hidden">
                 <EditorTabs />
                 <div className="ml-auto flex items-center gap-2">
-                  <Button
+                  {/* <Button
                     variant="ghost"
                     size="sm"
                     className="text-[#C9C9D6] hover:text-white hover:bg-[#1A1A20] px-2 py-1"
@@ -65,17 +65,18 @@ export default function ProjectWorkspacePage() {
                       setIsTerminalOpen(true);
                       console.log("Open terminal");
                     }}
-                  >
+                    >
                     <Terminal className="h-4 w-4" />
-                  </Button>
+                  </Button> */}
                   <Button
                     variant="ghost"
                     size="sm"
                     className="text-[#C9C9D6] hover:text-white hover:bg-[#1A1A20] px-2 py-1"
                     onClick={() => {
+                      setIsTerminalOpen(true);
                       console.log("Run code");
                     }}
-                  >
+                    >
                     <Play className="h-4 w-4" />
                   </Button>
                 </div>
