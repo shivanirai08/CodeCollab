@@ -133,7 +133,7 @@ export default function ProjectWorkspacePage() {
               <div className="relative flex-1 w-full bg-[#202026] min-w-0 overflow-hidden rounded-sm">
                 <div className="relative w-full bg-[#0B0B0F] h-full">
                   <MonacoEditor />
-                  {permissions.canEdit && (
+                  {permissions.canView && (
                     <TerminalPanel
                       isOpen={isTerminalOpen}
                       onClose={() => setIsTerminalOpen(false)}

@@ -139,7 +139,7 @@ export default function TerminalPanel({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 h-80 bg-[#0F0F14] border-t border-[#36363E] z-10 flex flex-col">
+    <div className="absolute bottom-0 left-0 right-0 h-80 bg-[#0F0F14] border border-[#36363E]/50 z-10 flex flex-col rounded-md">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-[#36363E]">
         <div className="flex items-center gap-2">
@@ -229,7 +229,7 @@ export default function TerminalPanel({ isOpen, onClose }) {
               }
             }}
             placeholder="Enter input for your program (optional)"
-            className="flex-1 bg-[#1A1A20] text-white text-sm px-3 py-1.5 rounded border border-[#36363E] focus:outline-none focus:border-[#4A4A52]"
+            className="flex-1 bg-white/4 text-white text-sm px-3 py-1.5 rounded focus:outline-none focus:border-[#4A4A52]"
             disabled={isExecuting}
           />
         </div>

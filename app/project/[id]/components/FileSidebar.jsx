@@ -252,7 +252,7 @@ export default function FileSidebar({ className }) {
         {/* Files */}
         <div className="flex-1 overflow-y-auto p-2 text-sm text-[#C9C9D6]">
           <div className="mb-4 flex items-center justify-between border-b border-[#36363E] pb-2">
-            <div className="text-xs uppercase tracking-wide text-[#8D8D98] px-2 flex items-center gap-2">
+            <div className="text-xs uppercase tracking-wide text-[#8D8D98] px-2 flex items-center gap-2 truncate">
               {projectname ||"Files"}
             </div>
             {!collapsed && permissions.canEdit && (

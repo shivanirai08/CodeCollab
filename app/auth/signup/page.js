@@ -34,6 +34,14 @@ export default function SignupPage() {
       toast.error("Username is required.");
       return;
     }
+    if (username.length > 15) {
+      toast.error("Username must be less than 15 characters.");
+      return;
+    }
+    if(!username.match(/^[a-zA-Z0-9_]+$/)){
+      toast.error("Username can only contain letters, numbers, and underscores.");
+      return;
+    }
 
     if (!email || email.trim() === "" || email.includes(" ")) {
       setError({ email: true });

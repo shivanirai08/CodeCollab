@@ -55,7 +55,7 @@ export default function ProjectCard({
       {/* Content */}
       <div className="flex justify-between pt-4 pb-2">
         <div className="flex flex-col">
-          <h3 className="text-lg font-semibold text-white">{title}</h3>
+          <h3 className="text-lg font-semibold text-white truncate">{title}</h3>
           {lastEditedText && (
             <p className="mt-1 text-sm text-gray-400">{lastEditedText}</p>
           )}
