@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useSelector } from "react-redux";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 
-export default function GlobalLoader() {
+function GlobalLoaderContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isRouteLoading, setIsRouteLoading] = useState(false);
@@ -100,5 +100,13 @@ export default function GlobalLoader() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function GlobalLoader() {
+  return (
+    <Suspense fallback={null}>
+      <GlobalLoaderContent />
+    </Suspense>
   );
 }
