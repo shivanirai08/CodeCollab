@@ -27,6 +27,7 @@ export async function middleware(request) {
   } = await supabase.auth.getUser();
 
   const path = nextUrl.pathname;
+  const referer = request.headers.get("referer");
 
   const isAuthPage = path.startsWith("/auth") || path === "/";
   const isProtectedPage =
@@ -34,6 +35,53 @@ export async function middleware(request) {
     path.startsWith("/projects") ||
     path.startsWith("/messages") ||
     path.startsWith("/settings");
+
+  // Special handling for restricted auth pages
+  const restrictedAuthPages = [
+    "/auth/verifyotp",
+    "/auth/resetpwd",
+    "/auth/newpwd",
+  ];
+
+  // Check if current path is a restricted auth page
+  if (restrictedAuthPages.includes(path)) {
+    // For /auth/newpwd - must have 'code' parameter in URL (from email link)
+    if (path === "/auth/newpwd") {
+      const hasCode = nextUrl.searchParams.has("code");
+      const hasValidSession = user !== null;
+
+      // Allow if code is present OR user has valid session (for password reset flow)
+      if (!hasCode && !hasValidSession) {
+        const redirectUrl = nextUrl.clone();
+        redirectUrl.pathname = "/auth/login";
+        return NextResponse.redirect(redirectUrl);
+      }
+    }
+    // For /auth/verifyotp - must come from signup page
+    else if (path === "/auth/verifyotp") {
+      // Check if referer is from signup or if there's an email in searchParams
+      const isFromSignup = referer?.includes("/auth/signup");
+      const hasEmail = nextUrl.searchParams.has("email");
+
+      if (!isFromSignup && !hasEmail) {
+        const redirectUrl = nextUrl.clone();
+        redirectUrl.pathname = "/auth/login";
+        return NextResponse.redirect(redirectUrl);
+      }
+    }
+    // For /auth/resetpwd - must come from login page or have valid referer
+    else if (path === "/auth/resetpwd") {
+      const isFromLogin = referer?.includes("/auth/login");
+      const isFromWithinApp = referer?.includes(nextUrl.origin);
+
+      // Allow if coming from login or from within the app
+      if (!isFromLogin && !isFromWithinApp) {
+        const redirectUrl = nextUrl.clone();
+        redirectUrl.pathname = "/auth/login";
+        return NextResponse.redirect(redirectUrl);
+      }
+    }
+  }
 
   // user not logged in → redirect to /
   if (!user && isProtectedPage) {
@@ -43,12 +91,11 @@ export async function middleware(request) {
   }
 
   // user is logged in → prevent access to / or /auth/*
-  if (user && isAuthPage) {
+  if (user && isAuthPage && !restrictedAuthPages.includes(path)) {
     const redirectUrl = nextUrl.clone();
     redirectUrl.pathname = "/dashboard";
     return NextResponse.redirect(redirectUrl);
   }
-
 
   return response;
 }
@@ -59,6 +106,7 @@ export const config = {
     "/",
     "/auth/:path*",
     "/dashboard/:path*",
+    "/project/:path*",
     "/projects/:path*",
     "/messages/:path*",
     "/settings/:path*",

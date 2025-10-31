@@ -7,10 +7,12 @@ import { Card } from "@/components/ui/card";
 import { Key } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 export default function JoinProjectPage() {
   const [projectCode, setProjectCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const handleJoinProject = async (e) => {
     e.preventDefault();
@@ -19,20 +21,13 @@ export default function JoinProjectPage() {
       toast.error("Project code must be 8 hex characters");
       return;
     }
-    // const { data: { user }, error } = await supabase.auth.getUser();
 
     setIsLoading(true);
     try {
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
-
-      const res = await fetch("/api/join", {
+      const res = await fetch("/api/project/join", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({ joinCode: projectCode }),
       });
@@ -47,6 +42,9 @@ export default function JoinProjectPage() {
         toast.error(data.error);
       } else if (data.joined) {
         toast.success(data.message || "Joined project!");
+         setTimeout(() => {
+          router.push(`/project/${data.projectId}`);
+        }, 500);
       } else {
         toast.info(data.message || "Request sent");
       }

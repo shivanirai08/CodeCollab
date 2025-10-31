@@ -1,42 +1,13 @@
+import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-// Service role client (for DB access)
-const serviceClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-// regular server client (for auth verification)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
 
 export async function POST(req) {
   try {
-    // const { joinCode , userId } = await req.json()
-    // const currentUserId = userId
+    const supabase = await createClient();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-    const authHeader = req.headers.get("authorization");
-    const token = authHeader?.split(" ")[1];
-
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // validate user with access token
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
+    const currentUserId = user?.id;
     const { joinCode } = await req.json();
-    const currentUserId = user.id;
 
     if (typeof joinCode !== "string" || !/^[a-f0-9]{8}$/.test(joinCode)) {
       return NextResponse.json(
@@ -49,7 +20,15 @@ export async function POST(req) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // --- Look up project ---
+    // Use service role for DB operations
+    const serviceClient = await import("@supabase/supabase-js").then(({ createClient }) =>
+      createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      )
+    );
+
+    //Look up project
     const { data: project, error: projectError } = await serviceClient
       .from("projects")
       .select("id, owner_id, visibility, title")
@@ -62,11 +41,12 @@ export async function POST(req) {
         { status: 400 }
       );
     }
+
     if (!project) {
       return NextResponse.json({ error: "No project found" }, { status: 404 });
     }
 
-    // --- Check membership ---
+    //Check membership
     const { data: existingMembership } = await serviceClient
       .from("project_members")
       .select("id, role")
@@ -90,7 +70,7 @@ export async function POST(req) {
       });
     }
 
-    // --- Public project? ---
+    //Public project
     if ((project.visibility || "").toLowerCase() === "public") {
       const { error: insertError } = await serviceClient
         .from("project_members")
@@ -106,13 +86,15 @@ export async function POST(req) {
           { status: 400 }
         );
       }
+
       return NextResponse.json({
         joined: true,
         message: "Joined the project successfully",
+        projectId: project.id,
       });
     }
 
-    // --- Private project: notify owner ---
+    //Private project: notify owner
     const { data: ownerUser } = await serviceClient.auth.admin.getUserById(
       project.owner_id
     );
@@ -131,7 +113,7 @@ export async function POST(req) {
           requesterId: currentUserId,
           joinCode,
         }),
-      }).catch(() => {});
+      }).catch((err) => console.warn("Webhook error:", err.message));
     }
 
     return NextResponse.json({
@@ -139,9 +121,8 @@ export async function POST(req) {
       message: "Request sent to owner",
     });
   } catch (err) {
-    console.error("/api/join error", err);
     return NextResponse.json(
-      { error: "Something went wrong" },
+      { error: err.message || "Something went wrong" },
       { status: 500 }
     );
   }
