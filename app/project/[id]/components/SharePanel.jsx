@@ -76,7 +76,7 @@ export default function SharePanel({ isOpen, onClose }) {
     }
   };
 
-  // Combine owner and collaborators into one list
+  // owner + collaborators
   const allMembers = [];
   
   if (owner) {

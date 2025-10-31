@@ -35,6 +35,7 @@ export default function InlineInput({ type, onSubmit, onCancel, initialValue }) 
       return "Invalid file name format"
     }
     
+    // check for text before extension
     const beforeExtension = name.substring(0, lastDotIndex)
     if (beforeExtension.length === 0) {
       return "File name must include text before the extension"
@@ -120,7 +121,7 @@ export default function InlineInput({ type, onSubmit, onCancel, initialValue }) 
 
   const handleChange = (e) => {
     setValue(e.target.value)
-    if (error) setError("") // Clear error on change
+    if (error) setError("") 
   }
 
   const handleBlur = () => {

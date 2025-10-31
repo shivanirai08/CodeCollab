@@ -26,6 +26,21 @@ const LANGUAGE_IDS = {
   plaintext: 63,
 };
 
+// Helper function to encode to base64
+function encodeBase64(str) {
+  return Buffer.from(str).toString("base64");
+}
+
+// Helper function to decode from base64
+function decodeBase64(str) {
+  if (!str) return "";
+  try {
+    return Buffer.from(str, "base64").toString("utf-8");
+  } catch (e) {
+    return str; // Return as-is if decoding fails
+  }
+}
+
 export async function POST(req) {
   try {
     const { sourceCode, language, stdin } = await req.json();
@@ -40,16 +55,20 @@ export async function POST(req) {
     const languageId =
       LANGUAGE_IDS[language?.toLowerCase()] || LANGUAGE_IDS.javascript;
 
-    // Submit code
+    // Encode source code and stdin to base64
+    const encodedSourceCode = encodeBase64(sourceCode);
+    const encodedStdin = stdin ? encodeBase64(stdin) : "";
+
+    // Submit code with base64 encoding
     const submitResponse = await axios.post(
       `${JUDGE0_API_URL}/submissions`,
       {
         language_id: languageId,
-        source_code: sourceCode,
-        stdin: stdin || "",
+        source_code: encodedSourceCode,
+        stdin: encodedStdin,
       },
       {
-        params: { base64_encoded: "false", wait: "false" },
+        params: { base64_encoded: "true", wait: "false" },
         headers: {
           "Content-Type": "application/json",
           "X-RapidAPI-Key": RAPID_API_KEY,
@@ -63,12 +82,12 @@ export async function POST(req) {
       throw new Error("Failed to receive execution token from Judge0");
     }
 
-    // Poll for results
+    // Poll for results with base64 encoding
     let result = null;
     for (let i = 0; i < 15; i++) {
       await new Promise((r) => setTimeout(r, 1200));
       const res = await axios.get(`${JUDGE0_API_URL}/submissions/${token}`, {
-        params: { base64_encoded: "false", fields: "*" },
+        params: { base64_encoded: "true", fields: "*" },
         headers: {
           "X-RapidAPI-Key": RAPID_API_KEY,
           "X-RapidAPI-Host": RAPID_API_HOST,
@@ -76,22 +95,29 @@ export async function POST(req) {
       });
 
       result = res.data;
-      if (result.status?.id >= 3) break; // finished
+      if (result.status?.id >= 3) break; // status id 3+ == execution is complete
     }
+
+    // Decode all outputs from base64
+    const stdout = decodeBase64(result?.stdout);
+    const stderr = decodeBase64(result?.stderr);
+    const compileOutput = decodeBase64(result?.compile_output);
+    const message = result?.message || "";
 
     // Handle possible error cases
     let output = "";
     let error = "";
     const statusDesc = result?.status?.description || "Unknown";
 
-    if (result?.compile_output) {
-      error = result.compile_output.trim();
-    } else if (result?.stderr) {
-      error = result.stderr.trim();
-    } else if (result?.message) {
-      error = result.message.trim();
-    } else if (result?.stdout) {
-      output = result.stdout.trim();
+    // Priority: compile errors > runtime errors > stderr > stdout
+    if (compileOutput) {
+      error = compileOutput.trim();
+    } else if (stderr) {
+      error = stderr.trim();
+    } else if (message && result?.status?.id !== 3) {
+      error = message.trim();
+    } else if (stdout) {
+      output = stdout.trim();
     } else {
       output = "No output.";
     }
