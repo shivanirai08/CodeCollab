@@ -51,14 +51,11 @@ export async function PATCH(req, { params }) {
       .single();
 
     if (error) {
-      console.error("Update node error:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    console.log("Node updated successfully:", data);
     return NextResponse.json({ node: data });
   } catch (err) {
-    console.error("Update node error:", err);
     return NextResponse.json({ error: err.message || "Internal Server Error" }, { status: 500 });
   }
 }
@@ -71,46 +68,14 @@ export async function DELETE(req, { params }) {
       return NextResponse.json({ error: "Node id required" }, { status: 400 });
     }
 
-    console.log("Deleting node:", nodeId);
-
-    // First, recursively delete all children if it's a folder
-    const { data: node } = await service
-      .from("nodes")
-      .select("type")
-      .eq("id", nodeId)
-      .single();
-
-    if (node && node.type === "folder") {
-      const deleteChildren = async (parentId) => {
-        const { data: children } = await service
-          .from("nodes")
-          .select("id, type")
-          .eq("parent_id", parentId);
-
-        if (children && children.length > 0) {
-          for (const child of children) {
-            if (child.type === "folder") {
-              await deleteChildren(child.id);
-            }
-          }
-          await service.from("nodes").delete().eq("parent_id", parentId);
-        }
-      };
-
-      await deleteChildren(nodeId);
-    }
-
     const { error } = await service.from("nodes").delete().eq("id", nodeId);
 
     if (error) {
-      console.error("Delete node error:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    console.log("Node deleted successfully");
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("Delete node error:", err);
     return NextResponse.json({ error: err.message || "Internal Server Error" }, { status: 500 });
   }
 }

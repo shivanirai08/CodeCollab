@@ -3,6 +3,8 @@ import ChatReducer from "./ChatSlice";
 import ProjectReducer from "./ProjectSlice";
 import nodesReducer from "./NodesSlice";
 import FetchProjectsSlice from "./FetchProjectsSlice";
+import loadingReducer from "./LoadingSlice";
+import UserSlice from "./UserSlice";
 
 const store = configureStore({
   reducer: {
@@ -10,6 +12,8 @@ const store = configureStore({
     project: ProjectReducer,
     nodes: nodesReducer,
     fetchprojects : FetchProjectsSlice,
+    loading: loadingReducer,
+    user: UserSlice,
   },
 });
 

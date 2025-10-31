@@ -1,12 +1,11 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { showLoader, hideLoader } from "./LoadingSlice";
 
 const initialState = {
   projectid: "",
   projectname: "Project",
   description: "",
   visibility: "",
-  template: "",
-  language: "",
   join_code: "",
   owner_id: "",
   owner: "",
@@ -21,43 +20,89 @@ const initialState = {
   error: null,
 };
 
-// Async Thunk to fetch project with permissions
+// Fetch project with permissions
 export const fetchProject = createAsyncThunk(
   "project/fetchProject",
-  async (projectid, { rejectWithValue }) => {
+  async (projectid, { rejectWithValue, dispatch }) => {
     try {
+      dispatch(showLoader("Loading project"));
+
       const res = await fetch(`/api/project/${projectid}`, {
         credentials: "same-origin",
       });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to fetch project");
+      const data = await res.json();
+
+      if (res.status === 403) {
+        return rejectWithValue(
+          data.error || "You don't have permission to view this project"
+        );
       }
 
-      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch project");
+      }
+
       return data;
     } catch (error) {
       return rejectWithValue(error.message);
+    } finally {
+      dispatch(hideLoader());
     }
   }
 );
 
-// Async Thunk to fetch project members
+// Create new project
+export const createProject = createAsyncThunk(
+  "project/createProject",
+  async (projectData, { rejectWithValue, dispatch }) => {
+    try {
+      dispatch(showLoader("Creating project"));
+
+      const res = await fetch("/api/project/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(projectData),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create project");
+      }
+
+      return data.project;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    } finally {
+      dispatch(hideLoader());
+    }
+  }
+);
+
+// Fetch project members
 export const memberProject = createAsyncThunk(
   "project/memberProject",
   async (projectid, { rejectWithValue }) => {
     try {
-      const res = await fetch(`/api/project/members/${projectid}`, {
+      const res = await fetch(`/api/project/${projectid}/members`, {
         credentials: "same-origin",
       });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to fetch members");
+      const data = await res.json();
+
+      // Handle 403 Forbidden
+      if (res.status === 403) {
+        return rejectWithValue(
+          data.error || "You don't have permission to view members"
+        );
       }
 
-      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch members");
+      }
+
       return data;
     } catch (error) {
       return rejectWithValue(error.message);
@@ -65,7 +110,7 @@ export const memberProject = createAsyncThunk(
   }
 );
 
-// Async Thunk to update project visibility
+// Update project visibility
 export const updateProjectVisibility = createAsyncThunk(
   "project/updateVisibility",
   async ({ projectid, visibility }, { rejectWithValue }) => {
@@ -99,8 +144,6 @@ const projectSlice = createSlice({
       state.projectname = "Project";
       state.description = "";
       state.visibility = "";
-      state.template = "";
-      state.language = "";
       state.join_code = "";
       state.owner_id = "";
       state.owner = "";
@@ -117,7 +160,32 @@ const projectSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      // Fetching project details with permissions
+      // Create project
+      .addCase(createProject.pending, (state) => {
+        state.status = "loading";
+        state.error = null;
+      })
+      .addCase(createProject.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.projectid = action.payload.id;
+        state.projectname = action.payload.title;
+        state.description = action.payload.description;
+        state.visibility = action.payload.visibility;
+        state.owner_id = action.payload.owner_id;
+        state.permissions = {
+          canEdit: true,
+          canView: true,
+          isOwner: true,
+          isCollaborator: false,
+        };
+        state.error = null;
+      })
+      .addCase(createProject.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.payload;
+      })
+
+      // Fetch project with permissions
       .addCase(fetchProject.pending, (state) => {
         state.status = "loading";
         state.error = null;
@@ -132,8 +200,6 @@ const projectSlice = createSlice({
           state.projectname = project.projectname;
           state.description = project.description;
           state.visibility = project.visibility;
-          state.template = project.template;
-          state.language = project.language;
           state.join_code = project.join_code;
           state.owner_id = project.owner_id;
         }
@@ -146,10 +212,17 @@ const projectSlice = createSlice({
       })
       .addCase(fetchProject.rejected, (state, action) => {
         state.status = "failed";
-        state.error = action.payload;
+        state.error = action.payload || "Failed to fetch project";
+        // Keep permissions as false when access is denied
+        state.permissions = {
+          canEdit: false,
+          canView: false,
+          isOwner: false,
+          isCollaborator: false,
+        };
       })
 
-      // Fetching project members
+      // Fetch project members
       .addCase(memberProject.pending, (state) => {
         state.status = "loading";
       })

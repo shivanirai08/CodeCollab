@@ -31,12 +31,12 @@ export default function NewPwdPage() {
       return
     }
     // Calling pwd api
-    const res = await fetch("api/newpwd",{
+    const res = await fetch("/api/newpwd",{
       method : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password }),
     })
-    const data = res.json();
+    const data = await res.json();
     if (data.error) toast.error(data.error)
     else {
       toast.success("Password updated successfully. Redirecting to login...")

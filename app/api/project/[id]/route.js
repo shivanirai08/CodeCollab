@@ -7,61 +7,75 @@ export async function GET(req, { params: paramsPromise }) {
     const supabase = await createClient();
 
     if (!id) {
-      return NextResponse.json({ error: "Project ID is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Project ID is required" },
+        { status: 400 }
+      );
     }
 
     // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     // Fetch project
-    const { data: projectData, error: projectError } = await supabase
+    const { data: project, error: projectError } = await supabase
       .from("projects")
-      .select("id, title, description, visibility, join_code, template, language, owner_id")
+      .select("*")
       .eq("id", id)
       .single();
 
-    if (projectError) {
-      return NextResponse.json({ error: projectError.message }, { status: 400 });
+    if (projectError || !project) {
+      return NextResponse.json(
+        { error: "Project not found" },
+        { status: 404 }
+      );
     }
 
-    // Compute permissions
-    const isOwner = user && projectData.owner_id === user.id;
+    // Determine role
+    let isOwner = false;
     let isCollaborator = false;
 
-    if (user && !isOwner) {
-      const { data: member } = await supabase
-        .from("project_members")
-        .select("role")
-        .eq("project_id", id)
-        .eq("user_id", user.id)
-        .single();
+    if (user) {
+        const { data: membership } = await supabase
+          .from("project_members")
+          .select("role")
+          .eq("project_id", id)
+          .eq("user_id", user.id)
+          .single();
 
-      isCollaborator = !!member;
+        isCollaborator = !!membership;
+        isOwner = project.owner_id === user.id;
     }
 
     const canEdit = isOwner || isCollaborator;
-    const canView = projectData.visibility === "public" || canEdit;
+    const canView = project.visibility === "public" || canEdit;
 
     if (!canView) {
-      return NextResponse.json({ error: "You don't have permission to view this project" }, { status: 403 });
+      return NextResponse.json(
+        { error: "You don't have permission to view this project" },
+        { status: 403 }
+      );
     }
 
-    const response = {
+    return NextResponse.json({
       project: {
-        projectid: projectData.id,
-        projectname: projectData.title,
-        description: projectData.description,
-        visibility: projectData.visibility,
-        join_code: projectData.join_code,
-        template: projectData.template,
-        language: projectData.language,
-        owner_id: projectData.owner_id,
+        projectid: project.id,
+        projectname: project.title,
+        description: project.description,
+        visibility: project.visibility,
+        join_code: project.join_code,
+        owner_id: project.owner_id,
       },
-      permissions: { canEdit, canView, isOwner, isCollaborator },
-    };
-
-    return NextResponse.json(response);
+      permissions: {
+        canEdit,
+        canView,
+        isOwner,
+        isCollaborator,
+      },
+    });
   } catch (err) {
+    console.error("Error fetching project:", err);
     return NextResponse.json(
       { error: err.message || "Internal Server Error" },
       { status: 500 }

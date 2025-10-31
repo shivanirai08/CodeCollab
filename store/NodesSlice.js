@@ -1,10 +1,11 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { showLoader, hideLoader } from "./LoadingSlice";
 
 const initialState = {
   nodes: [],
   activeFileId: null,
   openFiles: [],
-  fileContents: {}, // Add this to cache file contents
+  fileContents: {},
   status: "idle",
   error: null,
 };
@@ -14,7 +15,6 @@ export const fetchNodes = createAsyncThunk(
   "nodes/fetchNodes",
   async (projectId, { rejectWithValue }) => {
     try {
-      console.log("Fetching nodes for project:", projectId);
       const res = await fetch(`/api/project/${projectId}/nodes`, {
         credentials: "same-origin",
       });
@@ -26,10 +26,8 @@ export const fetchNodes = createAsyncThunk(
       }
       
       const data = await res.json();
-      console.log("Nodes fetched:", data.nodes);
       return data.nodes;
     } catch (error) {
-      console.error("Fetch nodes error:", error);
       return rejectWithValue(error.message);
     }
   }
@@ -38,9 +36,9 @@ export const fetchNodes = createAsyncThunk(
 // Fetch single file content
 export const fetchFileContent = createAsyncThunk(
   "nodes/fetchFileContent",
-  async (nodeId, { rejectWithValue }) => {
+  async (nodeId, { rejectWithValue, dispatch }) => {
     try {
-      console.log("Fetching content for node:", nodeId);
+      dispatch(showLoader("Loading file content"));
       const res = await fetch(`/api/project/nodes/${nodeId}`, {
         credentials: "same-origin",
       });
@@ -53,8 +51,9 @@ export const fetchFileContent = createAsyncThunk(
       const data = await res.json();
       return { nodeId, content: data.node.content, language: data.node.language };
     } catch (error) {
-      console.error("Fetch file content error:", error);
       return rejectWithValue(error.message);
+    } finally {
+      dispatch(hideLoader());
     }
   }
 );
@@ -62,10 +61,9 @@ export const fetchFileContent = createAsyncThunk(
 // Create a new node (file or folder)
 export const createNode = createAsyncThunk(
   "nodes/createNode",
-  async ({ projectId, name, type, parent_id, content, language }, { rejectWithValue }) => {
+  async ({ projectId, name, type, parent_id, content, language }, { rejectWithValue, dispatch }) => {
     try {
-      console.log("Creating node:", { projectId, name, type, parent_id });
-      
+      dispatch(showLoader("Creating node"));
       const res = await fetch(`/api/project/${projectId}/nodes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -75,16 +73,15 @@ export const createNode = createAsyncThunk(
       
       if (!res.ok) {
         const errorData = await res.json();
-        console.error("Create node failed:", errorData);
         throw new Error(errorData.error || "Failed to create node");
       }
       
       const data = await res.json();
-      console.log("Node created:", data.node);
       return data.node;
     } catch (error) {
-      console.error("Create node error:", error);
       return rejectWithValue(error.message);
+    } finally {
+      dispatch(hideLoader());
     }
   }
 );
@@ -92,10 +89,9 @@ export const createNode = createAsyncThunk(
 // Update node (for content changes)
 export const updateNode = createAsyncThunk(
   "nodes/updateNode",
-  async ({ nodeId, updates }, { rejectWithValue }) => {
+  async ({ nodeId, updates }, { rejectWithValue, dispatch }) => {
     try {
-      console.log("Updating node:", nodeId, updates);
-      
+      dispatch(showLoader("Updating node"));
       const res = await fetch(`/api/project/nodes/${nodeId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -105,16 +101,15 @@ export const updateNode = createAsyncThunk(
       
       if (!res.ok) {
         const errorData = await res.json();
-        console.error("Update node failed:", errorData);
         throw new Error(errorData.error || "Failed to update node");
       }
       
       const data = await res.json();
-      console.log("Node updated:", data.node);
       return data.node;
     } catch (error) {
-      console.error("Update node error:", error);
       return rejectWithValue(error.message);
+    }finally {
+      dispatch(hideLoader());
     }
   }
 );
@@ -139,7 +134,6 @@ export const updateFileContent = createAsyncThunk(
       const data = await res.json();
       return { nodeId, content: data.node.content };
     } catch (error) {
-      console.error("Update file content error:", error);
       return rejectWithValue(error.message);
     }
   }
@@ -148,10 +142,9 @@ export const updateFileContent = createAsyncThunk(
 // Delete node
 export const deleteNode = createAsyncThunk(
   "nodes/deleteNode",
-  async (nodeId, { rejectWithValue }) => {
+  async (nodeId, { rejectWithValue, dispatch }) => {
     try {
-      console.log("Deleting node:", nodeId);
-      
+      dispatch(showLoader("Deleting node"));
       const res = await fetch(`/api/project/nodes/${nodeId}`, {
         method: "DELETE",
         credentials: "same-origin",
@@ -159,15 +152,14 @@ export const deleteNode = createAsyncThunk(
       
       if (!res.ok) {
         const errorData = await res.json();
-        console.error("Delete node failed:", errorData);
         throw new Error(errorData.error || "Failed to delete node");
       }
       
-      console.log("Node deleted successfully");
       return nodeId;
     } catch (error) {
-      console.error("Delete node error:", error);
       return rejectWithValue(error.message);
+    } finally {
+      dispatch(hideLoader());
     }
   }
 );

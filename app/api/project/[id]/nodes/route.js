@@ -23,13 +23,11 @@ export async function GET(req, { params }) {
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error("Fetch nodes error:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     return NextResponse.json({ nodes: data || [] });
   } catch (err) {
-    console.error("Fetch nodes error:", err);
     return NextResponse.json({ error: err.message || "Internal Server Error" }, { status: 500 });
   }
 }
@@ -62,20 +60,16 @@ export async function POST(req, { params }) {
         name,
         type,
         content: content || "",
-        language: language || null,
       })
       .select()
       .single();
 
     if (error) {
-      console.error("Create node error:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    console.log("Node created successfully:", data);
     return NextResponse.json({ node: data });
   } catch (err) {
-    console.error("Create node error:", err);
     return NextResponse.json({ error: err.message || "Internal Server Error" }, { status: 500 });
   }
 }

@@ -24,6 +24,10 @@ export default function FolderItem({
   onCreateNode,
   onCancelCreate,
   openFolders,
+  canEdit,
+  renamingNode,
+  onRenameNode,
+  onCancelRename,
 }) {
   const handleToggle = (e) => {
     e.stopPropagation()
@@ -45,28 +49,30 @@ export default function FolderItem({
         {!collapsed && <span className="flex-1 truncate">{folder.name}</span>}
         {!collapsed && (
           <>
-            <div className="hidden group-hover:flex items-center gap-1 flex-shrink-0">
-              <button
-                className="p-0.5 hover:bg-[#29292E] rounded transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onAddFile(folder.id)
-                }}
-                title="New File"
-              >
-                <HiOutlineDocumentText size={14} />
-              </button>
-              <button
-                className="p-0.5 hover:bg-[#29292E] rounded transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onAddFolder(folder.id)
-                }}
-                title="New Folder"
-              >
-                <HiOutlineFolder size={14} />
-              </button>
-            </div>
+            {canEdit && (
+              <div className="hidden group-hover:flex items-center gap-1 flex-shrink-0">
+                <button
+                  className="p-0.5 hover:bg-[#29292E] rounded transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onAddFile(folder.id)
+                  }}
+                  title="New File"
+                >
+                  <HiOutlineDocumentText size={14} />
+                </button>
+                <button
+                  className="p-0.5 hover:bg-[#29292E] rounded transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onAddFolder(folder.id)
+                  }}
+                  title="New Folder"
+                >
+                  <HiOutlineFolder size={14} />
+                </button>
+              </div>
+            )}
             <span className="text-[#8D8D98] flex-shrink-0">
               {open ? <HiChevronDown size={14} /> : <HiChevronRight size={14} />}
             </span>
@@ -86,7 +92,15 @@ export default function FolderItem({
           )}
 
           {folder.children.map((child) =>
-            child.type === "folder" ? (
+            renamingNode && renamingNode.nodeId === child.id ? (
+              <InlineInput
+                key={child.id}
+                type={child.type}
+                onSubmit={onRenameNode}
+                onCancel={onCancelRename}
+                initialValue={renamingNode.currentName}
+              />
+            ) : child.type === "folder" ? (
               <FolderItem
                 key={child.id}
                 folder={child}

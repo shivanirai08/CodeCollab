@@ -90,6 +90,7 @@ export async function POST(req) {
       return NextResponse.json({
         joined: true,
         message: "Joined the project successfully",
+        projectId: project.id,
       });
     }
 

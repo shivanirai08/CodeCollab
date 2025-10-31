@@ -1,4 +1,5 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { showLoader, hideLoader } from "./LoadingSlice";
 
 const initialState = {
   projects: [],
@@ -10,14 +11,17 @@ const initialState = {
 
 export const FetchAllProjects = createAsyncThunk(
   "projects/fetchAll",
-  async (_, { rejectWithValue }) => {
+  async (_, { rejectWithValue, dispatch }) => {
     try {
+      dispatch(showLoader("Loading projects"));
       const res = await fetch(`/api/project`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch projects");
       return data.projects;
     } catch (error) {
       return rejectWithValue(error.message);
+    } finally {
+      dispatch(hideLoader());
     }
   }
 );

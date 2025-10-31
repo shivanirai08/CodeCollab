@@ -1,33 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect} from "react";
 import ProjectCard from "@/components/ui/ProjectCard";
 import { useDispatch, useSelector } from "react-redux";
 import { FetchAllProjects } from "@/store/FetchProjectsSlice";
+import { fetchUserInfo } from "@/store/UserSlice";
 
 export default function DashboardPage() {
   const dispatch = useDispatch();
   const Projects = useSelector((state) => state.fetchprojects.projects);
-  const [userName, setUserName] = useState(null);
+  const userName = useSelector((state) => state.user.userName);
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await fetch("/api/user");
-        if (!res.ok) {
-          console.error("Failed to fetch user, status:", res.status);
-          return;
-        }
-        const data = await res.json();
-        const user = data?.user;
-        const name = user?.username;
-        setUserName(name);
-      } catch (error) {
-        console.error("Error fetching user data:", error);
-      }
-    };
-
-    fetchUser();
+    dispatch(fetchUserInfo());
     dispatch(FetchAllProjects());
   }, [dispatch]);
 

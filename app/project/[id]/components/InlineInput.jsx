@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef } from "react"
 import { HiOutlineFolder, HiOutlineDocumentText } from "react-icons/hi"
 
-export default function InlineInput({ type, onSubmit, onCancel }) {
-  const [value, setValue] = useState("")
+export default function InlineInput({ type, onSubmit, onCancel, initialValue }) {
+  const [value, setValue] = useState(initialValue || "")
   const [error, setError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const inputRef = useRef(null)
 
   useEffect(() => {
@@ -13,21 +14,22 @@ export default function InlineInput({ type, onSubmit, onCancel }) {
   }, [])
 
   const validateFileName = (name) => {
-    // File must have at least one character before extension
-    // Can contain letters, numbers, underscores, hyphens, and dots
-    // Must have an extension (at least one char before and after the last dot)
     const fileRegex = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)*\.[a-zA-Z0-9]+$/
     
     if (!fileRegex.test(name)) {
-      return "File name must contain at least one character before extension (e.g., file.txt)"
+      return "File name must include text before the extension (e.g. file.txt)."
     }
     
+    if (name.length > 20) {
+      return "File name is too long (max 20 characters)"
+    }
+
     // Check for valid characters only
     if (!/^[a-zA-Z0-9_.\-]+$/.test(name)) {
-      return "File name can only contain letters, numbers, underscores, hyphens, and dots"
+      return "File name must include only A–Z, 0–9, _, -, or ."
     }
     
-    // Ensure there's content before the last dot
+    // extension checks
     const lastDotIndex = name.lastIndexOf(".")
     if (lastDotIndex === 0 || lastDotIndex === name.length - 1) {
       return "Invalid file name format"
@@ -35,28 +37,25 @@ export default function InlineInput({ type, onSubmit, onCancel }) {
     
     const beforeExtension = name.substring(0, lastDotIndex)
     if (beforeExtension.length === 0) {
-      return "File name must have at least one character before the extension"
+      return "File name must include text before the extension"
     }
     
     return null
   }
 
   const validateFolderName = (name) => {
-    // Folder can contain letters, numbers, underscores, and hyphens
-    // Must start with a letter, number, or underscore
-    // Cannot contain dots, spaces, or special characters except underscore and hyphen
     const folderRegex = /^[a-zA-Z0-9_][a-zA-Z0-9_-]*$/
     
     if (!folderRegex.test(name)) {
-      return "Folder name must start with a letter, number, or underscore and can only contain letters, numbers, underscores, and hyphens"
+      return "Folder name must start with A–Z, 0–9, or _ and use only letters, digits, _, or -."
     }
     
     if (name.length === 0) {
       return "Folder name cannot be empty"
     }
     
-    if (name.length > 255) {
-      return "Folder name is too long (max 255 characters)"
+    if (name.length > 20) {
+      return "Folder name is too long (max 20 characters)"
     }
     
     // Reserved names check
@@ -68,27 +67,53 @@ export default function InlineInput({ type, onSubmit, onCancel }) {
     return null
   }
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") {
-      const trimmedValue = value.trim()
-      
-      if (!trimmedValue) {
+  const handleSubmit = async (e) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+
+    const trimmedValue = value.trim();
+    if (!trimmedValue) {
         setError("Name cannot be empty")
         return
       }
       
-      const validationError = type === "file" 
+    const validationError = type === "file" 
         ? validateFileName(trimmedValue) 
         : validateFolderName(trimmedValue)
       
-      if (validationError) {
+    if (validationError) {
         setError(validationError)
         return
       }
       
-      setError("")
-      onSubmit(trimmedValue)
+    setError("")
+
+    if (trimmedValue) {
+      setIsSubmitting(true);
+      try {
+        await onSubmit(trimmedValue);
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      onCancel();
+    }
+  };
+
+  
+  const handleKeyDown = (e) => {
+    if (isSubmitting) {
+      e.preventDefault();
+      return;
+    }
+
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      handleSubmit();
     } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
       onCancel()
     }
   }
@@ -99,6 +124,10 @@ export default function InlineInput({ type, onSubmit, onCancel }) {
   }
 
   const handleBlur = () => {
+    if (isSubmitting) {
+      return;
+    }
+
     const trimmedValue = value.trim()
     
     if (!trimmedValue) {
@@ -115,10 +144,18 @@ export default function InlineInput({ type, onSubmit, onCancel }) {
       // Don't cancel on blur if there's an error, let user fix it
       inputRef.current?.focus()
       return
-    }
-    
+    }    
     setError("")
-    onSubmit(trimmedValue)
+
+    // Small delay to allow click events to register
+    setTimeout(() => {
+      const trimmedValue = value.trim();
+      if (trimmedValue && !isSubmitting) {
+        handleSubmit();
+      } else if (!isSubmitting) {
+        onCancel();
+      }
+    }, 150);
   }
 
   return (

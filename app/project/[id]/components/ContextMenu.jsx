@@ -1,8 +1,8 @@
 "use client"
 
-import { HiTrash } from "react-icons/hi"
+import { HiTrash, HiOutlinePencil } from "react-icons/hi"
 
-export default function ContextMenu({ contextMenu, onDelete }) {
+export default function ContextMenu({ contextMenu, onDelete, onRename }) {
   if (!contextMenu) return null
 
   return (
@@ -12,10 +12,18 @@ export default function ContextMenu({ contextMenu, onDelete }) {
       onClick={(e) => e.stopPropagation()}
     >
       <button
+        className="w-full px-3 py-2 text-left text-sm hover:bg-[#29292E] flex items-center gap-2 text-gray-400 transition-colors"
+        onClick={(e) => { e.stopPropagation();
+            onRename(contextMenu.nodeId); }}
+      >
+        <HiOutlinePencil className="h-4 w-4" />
+        Rename
+      </button>
+      <button
         className="w-full px-3 py-2 text-left text-sm hover:bg-[#29292E] flex items-center gap-2 text-red-400 transition-colors"
         onClick={() => onDelete(contextMenu.nodeId)}
       >
-        <HiTrash size={16} />
+        <HiTrash className="h-4 w-4"/>
         Delete
       </button>
     </div>
