@@ -5,11 +5,13 @@ import { FiMessageSquare } from "react-icons/fi";
 import { useState } from "react";
 import SharePanel from "./SharePanel";
 import { useSelector } from "react-redux";
+import OnlineAvatars from "./OnlineAvatars";
 
 
 export default function TopBar({ onToggleChat, isChatOpen }) {
   const project = useSelector((state) => state.project);
-  const[isShareOpen, setIsShareOpen] = useState(false);
+  const onlineUsers = useSelector((state) => state.project.onlineUsers);
+  const [isShareOpen, setIsShareOpen] = useState(false);
 
   return (
     <div className="flex items-center justify-between px-4 pt-6 pb-2">
@@ -20,15 +22,8 @@ export default function TopBar({ onToggleChat, isChatOpen }) {
 
       {/* Right Side: Avatars, Chat Icon, Share Button */}
       <div className="flex items-center gap-3">
-        {/* Avatars */}
-        <div className="flex -space-x-2">
-          <div className="w-8 h-8 rounded-full bg-yellow-500 flex items-center justify-center text-xs font-bold text-black border-2 border-[var(--card)]">
-            SR
-          </div>
-          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-xs font-bold text-white border-2 border-[var(--card)]">
-            KM
-          </div>
-        </div>
+        {/* Online Users Avatars */}
+        <OnlineAvatars onlineUsers={onlineUsers} />
 
         {/* Chat Button */}
         <Button

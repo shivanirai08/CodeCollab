@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchProject, memberProject } from "@/store/ProjectSlice";
 import { fetchNodes } from "@/store/NodesSlice";
+import { fetchUserInfo } from "@/store/UserSlice";
 import { cn } from "@/lib/utils";
 import { Play } from "lucide-react";
 import { HiEye } from "react-icons/hi";
@@ -16,6 +17,8 @@ import ChatPanel from "./components/ChatPanel";
 import TerminalPanel from "./components/Terminal";
 import AccessDeniedModal from "./components/AccessDeniedModal";
 import { useParams } from "next/navigation";
+import useRealtimeNodes from "@/hooks/useRealtimeNodes";
+import useRealtimePresence from "@/hooks/useRealtimePresence";
 
 export default function ProjectWorkspacePage() {
   const params = useParams();
@@ -26,12 +29,21 @@ export default function ProjectWorkspacePage() {
   const permissions = useSelector((state) => state.project.permissions);
   const projectStatus = useSelector((state) => state.project.status);
   const projectError = useSelector((state) => state.project.error);
+  const currentUserId = useSelector((state) => state.user.id);
 
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [showAccessDenied, setShowAccessDenied] = useState(false);
+  const [realtimeEnabled, setRealtimeEnabled] = useState(false);
+
+  // Real-time subscriptions for nodes and presence
+  useRealtimeNodes(projectId, realtimeEnabled, currentUserId);
+  useRealtimePresence(projectId, realtimeEnabled);
 
   useEffect(() => {
+    // Fetch user info first for presence tracking
+    dispatch(fetchUserInfo());
+
     if (projectId) {
       dispatch(fetchProject(projectId))
         .unwrap()
@@ -41,6 +53,8 @@ export default function ProjectWorkspacePage() {
           } else {
             dispatch(memberProject(projectId));
             dispatch(fetchNodes(projectId));
+            // Enable real-time subscriptions after successful project load
+            setRealtimeEnabled(true);
           }
         })
         .catch((error) => {

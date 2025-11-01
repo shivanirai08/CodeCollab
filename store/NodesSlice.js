@@ -193,6 +193,67 @@ const nodesSlice = createSlice({
       const { nodeId, content } = action.payload;
       state.fileContents[nodeId] = content;
     },
+    // Real-time actions for handling changes from other users
+    handleRemoteNodeInsert: (state, action) => {
+      const newNode = action.payload;
+      // Check if node already exists (avoid duplicates)
+      const exists = state.nodes.some((n) => n.id === newNode.id);
+      if (!exists) {
+        state.nodes.push(newNode);
+        if (newNode.type === "file") {
+          state.fileContents[newNode.id] = newNode.content || "";
+        }
+      }
+    },
+    handleRemoteNodeUpdate: (state, action) => {
+      const updatedNode = action.payload;
+      const index = state.nodes.findIndex((n) => n.id === updatedNode.id);
+      if (index !== -1) {
+        const oldNode = state.nodes[index];
+        state.nodes[index] = updatedNode;
+
+        // Update file content cache if it's a file and content changed
+        if (updatedNode.type === "file") {
+          // Only update if the file is not currently being edited by the user
+          // or if it's not the active file (to prevent overwriting user's changes)
+          const isActiveFile = state.activeFileId === updatedNode.id;
+          const hasLocalChanges = state.fileContents[updatedNode.id] !== oldNode.content;
+
+          // Update content cache, but mark conflict if user has unsaved changes
+          if (!isActiveFile || !hasLocalChanges) {
+            state.fileContents[updatedNode.id] = updatedNode.content;
+          }
+        }
+      }
+    },
+    handleRemoteNodeDelete: (state, action) => {
+      const deletedNode = action.payload;
+
+      // Handle both cases: full node object or just ID
+      const nodeId = deletedNode?.id || deletedNode;
+
+      if (!nodeId) {
+        console.error('[NodesSlice] handleRemoteNodeDelete: No node ID provided');
+        return;
+      }
+
+      console.log('[NodesSlice] Deleting node:', nodeId);
+
+      const removeNodeAndChildren = (id) => {
+        const children = state.nodes.filter((n) => n.parent_id === id);
+        children.forEach((child) => removeNodeAndChildren(child.id));
+        state.nodes = state.nodes.filter((n) => n.id !== id);
+        delete state.fileContents[id];
+      };
+
+      removeNodeAndChildren(nodeId);
+
+      // Close the file if it was open
+      state.openFiles = state.openFiles.filter((id) => id !== nodeId);
+      if (state.activeFileId === nodeId) {
+        state.activeFileId = state.openFiles[0] || null;
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -281,5 +342,13 @@ const nodesSlice = createSlice({
   },
 });
 
-export const { setActiveFile, closeFile, closeAllFiles, updateLocalContent } = nodesSlice.actions;
+export const {
+  setActiveFile,
+  closeFile,
+  closeAllFiles,
+  updateLocalContent,
+  handleRemoteNodeInsert,
+  handleRemoteNodeUpdate,
+  handleRemoteNodeDelete
+} = nodesSlice.actions;
 export default nodesSlice.reducer;

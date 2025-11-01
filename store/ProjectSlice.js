@@ -10,6 +10,7 @@ const initialState = {
   owner_id: "",
   owner: "",
   collaborators: [],
+  onlineUsers: [],
   permissions: {
     canEdit: false,
     canView: false,
@@ -148,6 +149,7 @@ const projectSlice = createSlice({
       state.owner_id = "";
       state.owner = "";
       state.collaborators = [];
+      state.onlineUsers = [];
       state.permissions = {
         canEdit: false,
         canView: false,
@@ -156,6 +158,10 @@ const projectSlice = createSlice({
       };
       state.status = "idle";
       state.error = null;
+    },
+    // Update online users from presence tracking
+    updateOnlineUsers: (state, action) => {
+      state.onlineUsers = action.payload;
     },
   },
   extraReducers: (builder) => {
@@ -252,5 +258,5 @@ const projectSlice = createSlice({
   },
 });
 
-export const { clearProject } = projectSlice.actions;
+export const { clearProject, updateOnlineUsers } = projectSlice.actions;
 export default projectSlice.reducer;
