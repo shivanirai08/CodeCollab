@@ -1,26 +1,79 @@
 "use client";
 
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
 import Editor, { useMonaco } from "@monaco-editor/react";
 import { useSelector, useDispatch } from "react-redux";
-import { updateLocalContent, updateFileContent } from "@/store/NodesSlice";
+import { updateLocalContent, updateFileContent, updateRemoteCursor, clearRemoteCursorsForFile } from "@/store/NodesSlice";
 import { debounce } from "lodash";
 import { toast } from "sonner";
+import useCollaborativeEditing from "@/hooks/useCollaborativeEditing";
+import useRemoteCursors from "@/hooks/useRemoteCursors";
+import { useParams } from "next/navigation";
 
 const MonacoEditor = () => {
   const dispatch = useDispatch();
   const monaco = useMonaco();
   const editorRef = useRef(null);
+  const params = useParams();
+  const projectId = params.id;
+  const [versionCounter, setVersionCounter] = useState(0);
 
   const activeFileId = useSelector((state) => state.nodes.activeFileId);
   const nodes = useSelector((state) => state.nodes.nodes);
   const fileContents = useSelector((state) => state.nodes.fileContents);
   const permissions = useSelector((state) => state.project.permissions);
+  const remoteCursors = useSelector((state) => state.nodes.remoteCursors[activeFileId] || {});
   const isReadOnly = !permissions.canEdit;
 
   // Get active file details
   const activeFile = nodes.find((n) => n.id === activeFileId);
   const content = activeFileId ? fileContents[activeFileId] || "" : "";
+
+  // Collaborative editing callbacks
+  const handleRemoteContentChange = useCallback((data) => {
+    if (!editorRef.current || !activeFileId) return;
+
+    const editor = editorRef.current;
+    const currentPosition = editor.getPosition();
+
+    // Apply remote content change
+    dispatch(updateLocalContent({ nodeId: activeFileId, content: data.content }));
+
+    // Try to preserve cursor position after content update
+    setTimeout(() => {
+      if (currentPosition) {
+        editor.setPosition(currentPosition);
+      }
+    }, 0);
+  }, [dispatch, activeFileId]);
+
+  const handleRemoteCursorChange = useCallback((data) => {
+    if (!activeFileId) return;
+
+    console.log('[Editor] Remote cursor update:', data.username, data.position);
+
+    dispatch(updateRemoteCursor({
+      fileId: activeFileId,
+      userId: data.userId,
+      username: data.username,
+      position: data.position,
+      avatar_url: data.avatar_url,
+    }));
+  }, [dispatch, activeFileId]);
+
+  // Get current user info to ensure it's loaded
+  const currentUserId = useSelector((state) => state.user.id);
+  const currentUsername = useSelector((state) => state.user.userName);
+
+  // Collaborative editing hook
+  const collaborativeEditing = useCollaborativeEditing(projectId, activeFileId, {
+    onRemoteChange: handleRemoteContentChange,
+    onRemoteCursor: handleRemoteCursorChange,
+    enabled: permissions.canEdit && !!activeFileId && !!currentUserId,
+  });
+
+  const { broadcastContentChange, broadcastCursorPosition, isApplyingRemoteChange } = collaborativeEditing;
+
 
   // Debounced save to database
   const debouncedSave = useCallback(
@@ -35,8 +88,19 @@ const MonacoEditor = () => {
   const handleEditorChange = (value) => {
     if (!activeFileId || !permissions.canEdit) return;
 
+    // Don't broadcast if we're applying a remote change
+    if (isApplyingRemoteChange()) return;
+
+    const newVersion = versionCounter + 1;
+    setVersionCounter(newVersion);
+
     dispatch(updateLocalContent({ nodeId: activeFileId, content: value }));
     debouncedSave(activeFileId, value);
+
+    // Broadcast content change to collaborators
+    if (broadcastContentChange) {
+      broadcastContentChange(value, newVersion);
+    }
   };
 
   const handleReadOnlyAttempt = () => {
@@ -51,6 +115,19 @@ const MonacoEditor = () => {
       debouncedSave.cancel();
     };
   }, [debouncedSave]);
+
+  // Clear remote cursors when switching files
+  useEffect(() => {
+    if (activeFileId) {
+      // Clear old cursors when switching files
+      return () => {
+        dispatch(clearRemoteCursorsForFile(activeFileId));
+      };
+    }
+  }, [activeFileId, dispatch]);
+
+  // Render remote cursors using custom hook
+  useRemoteCursors(editorRef, monaco, remoteCursors);
 
   // Setup Monaco theme
   useEffect(() => {
@@ -67,9 +144,14 @@ const MonacoEditor = () => {
     }
   }, [monaco]);
 
+  // Store cursor tracking disposable
+  const cursorDisposableRef = useRef(null);
+
   // Handle editor mount
   const handleEditorDidMount = (editor) => {
     editorRef.current = editor;
+
+    console.log('[Editor] Editor mounted, setting up cursor tracking...');
 
     // Add event listener for read-only attempts
     if (isReadOnly) {
@@ -90,7 +172,38 @@ const MonacoEditor = () => {
         }
       });
     }
+
+    // Set up cursor tracking immediately on mount
+    if (permissions.canEdit && broadcastCursorPosition) {
+
+      cursorDisposableRef.current = editor.onDidChangeCursorPosition((e) => {
+        const position = e.position;
+        // console.log('[Editor] Cursor moved to:', position.lineNumber, position.column);
+
+        // Broadcast cursor position
+        broadcastCursorPosition({
+          lineNumber: position.lineNumber,
+          column: position.column,
+        });
+      });
+    } else {
+      console.warn('[Editor] Cannot set up cursor tracking:', {
+        canEdit: permissions.canEdit,
+        hasBroadcast: !!broadcastCursorPosition,
+      });
+    }
   };
+
+  // Clean up cursor tracking on unmount
+  useEffect(() => {
+    return () => {
+      if (cursorDisposableRef.current) {
+        console.log('[Editor] Cleaning up cursor tracking');
+        cursorDisposableRef.current.dispose();
+        cursorDisposableRef.current = null;
+      }
+    };
+  }, []);
 
   // Get language from file extension
   const getLanguageFromFileName = (fileName) => {
@@ -185,6 +298,20 @@ const MonacoEditor = () => {
           id="save-indicator"
         >
           Saving...
+        </div>
+      )}
+
+      {/* Remote cursors indicator */}
+      {Object.keys(remoteCursors).length > 0 && (
+        <div className="absolute bottom-2 left-2 text-xs text-[#8D8D98] bg-[#1A1A20] px-2 py-1 rounded">
+          {Object.keys(remoteCursors).length} collaborator(s) editing
+          <div className="text-[10px] mt-1">
+            {Object.entries(remoteCursors).map(([userId, data]) => (
+              <div key={userId} style={{ color: data.color }}>
+                {data.username}: Line {data.position?.lineNumber}, Col {data.position?.column}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

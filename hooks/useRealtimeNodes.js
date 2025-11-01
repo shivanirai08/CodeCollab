@@ -54,11 +54,6 @@ export const useRealtimeNodes = (projectId, enabled = true, currentUserId = null
             description: 'A collaborator renamed a file',
             duration: 3000,
           });
-        } else if (contentChanged && updatedNode.type === 'file') {
-          toast.info(`File updated: ${updatedNode.name}`, {
-            description: 'A collaborator modified the file',
-            duration: 2000,
-          });
         }
       },
 

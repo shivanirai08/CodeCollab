@@ -6,6 +6,7 @@ const initialState = {
   activeFileId: null,
   openFiles: [],
   fileContents: {},
+  remoteCursors: {}, // { fileId: { userId: { username, position, color, timestamp } } }
   status: "idle",
   error: null,
 };
@@ -193,6 +194,45 @@ const nodesSlice = createSlice({
       const { nodeId, content } = action.payload;
       state.fileContents[nodeId] = content;
     },
+    // Update remote cursor position
+    updateRemoteCursor: (state, action) => {
+      const { fileId, userId, username, position, avatar_url } = action.payload;
+
+      if (!state.remoteCursors[fileId]) {
+        state.remoteCursors[fileId] = {};
+      }
+
+      // Generate a consistent color for this user
+      const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2'];
+      const userHash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const color = colors[userHash % colors.length];
+
+      state.remoteCursors[fileId][userId] = {
+        username,
+        position,
+        color,
+        avatar_url,
+        timestamp: Date.now(),
+      };
+    },
+    // Remove remote cursor (when user leaves or stops editing)
+    removeRemoteCursor: (state, action) => {
+      const { fileId, userId } = action.payload;
+
+      if (state.remoteCursors[fileId]) {
+        delete state.remoteCursors[fileId][userId];
+
+        // Clean up empty file entries
+        if (Object.keys(state.remoteCursors[fileId]).length === 0) {
+          delete state.remoteCursors[fileId];
+        }
+      }
+    },
+    // Clear all remote cursors for a file
+    clearRemoteCursorsForFile: (state, action) => {
+      const fileId = action.payload;
+      delete state.remoteCursors[fileId];
+    },
     // Real-time actions for handling changes from other users
     handleRemoteNodeInsert: (state, action) => {
       const newNode = action.payload;
@@ -347,6 +387,9 @@ export const {
   closeFile,
   closeAllFiles,
   updateLocalContent,
+  updateRemoteCursor,
+  removeRemoteCursor,
+  clearRemoteCursorsForFile,
   handleRemoteNodeInsert,
   handleRemoteNodeUpdate,
   handleRemoteNodeDelete
