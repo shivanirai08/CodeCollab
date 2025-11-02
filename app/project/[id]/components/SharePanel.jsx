@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { X, Copy, Check, Globe, Lock, ChevronDown, Link2, Menu, EllipsisVertical } from "lucide-react";
+import { X, Copy, Check, Globe, Lock, ChevronDown, Link2, Menu, EllipsisVertical, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSelector, useDispatch } from "react-redux";
 import { toast } from "sonner";
 import { updateProjectVisibility } from "@/store/ProjectSlice";
 import { useParams } from "next/navigation";
+import DeleteModal from "@/components/ui/DeleteModal";
 
 export default function SharePanel({ isOpen, onClose }) {
   const dispatch = useDispatch();
@@ -20,11 +21,15 @@ export default function SharePanel({ isOpen, onClose }) {
   const visibility = useSelector((state) => state.project.visibility);
   const permissions = useSelector((state) => state.project.permissions);
   const projectname = useSelector((state) => state.project.projectname);
+  const currentUserId = useSelector((state) => state.user.id);
 
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showVisibilityMenu, setShowVisibilityMenu] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showMemberMenu, setShowMemberMenu] = useState(null); // Store member ID for which menu is open
+  const [isRemoving, setIsRemoving] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState(null); // Store member data for delete modal
 
   if (!isOpen) return null;
 
@@ -73,6 +78,37 @@ export default function SharePanel({ isOpen, onClose }) {
       toast.error(error || "Failed to update visibility");
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleRemoveClick = (member) => {
+    setMemberToRemove(member);
+    setShowMemberMenu(null);
+  };
+
+  const handleConfirmRemove = async () => {
+    if (!memberToRemove) return;
+
+    setIsRemoving(true);
+
+    try {
+      const res = await fetch(`/api/project/${projectId}/members?userId=${memberToRemove.user_id}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to remove collaborator");
+      }
+
+      toast.success(`${memberToRemove.username} removed from project`);
+      // Real-time will update the members list automatically
+      setMemberToRemove(null);
+    } catch (error) {
+      toast.error(error.message || "Failed to remove collaborator");
+    } finally {
+      setIsRemoving(false);
     }
   };
 
@@ -157,38 +193,40 @@ export default function SharePanel({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* Project Code */}
-        <div className="px-6 pt-2">
-          <div className="bg-[#23232A] border border-[#303036] rounded-lg px-3 py-1 flex items-center justify-between">
-            <div className="flex gap-4 items-center">
-              <div className="text-xs text-gray-400 mb-1">Project Code</div>
-              <div className="font-mono text-base font-semibold">
-                {project_code || "No code"}
+        {/* Project Code - Only visible to edit/owner users */}
+        {permissions.canEdit && (
+          <div className="px-6 pt-2">
+            <div className="bg-[#23232A] border border-[#303036] rounded-lg px-3 py-1 flex items-center justify-between">
+              <div className="flex gap-4 items-center">
+                <div className="text-xs text-gray-400 mb-1">Project Code</div>
+                <div className="font-mono text-base font-semibold">
+                  {project_code || "No code"}
+                </div>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopyCode}
+                className={cn(
+                  "text-gray-300 hover:text-white hover:bg-[#303036] h-8 px-3",
+                  copiedCode && "text-green-400"
+                )}
+              >
+                {copiedCode ? (
+                  <>
+                    <Check className="h-4 w-4 mr-1.5" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 mr-1.5" />
+                    Copy
+                  </>
+                )}
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCopyCode}
-              className={cn(
-                "text-gray-300 hover:text-white hover:bg-[#303036] h-8 px-3",
-                copiedCode && "text-green-400"
-              )}
-            >
-              {copiedCode ? (
-                <>
-                  <Check className="h-4 w-4 mr-1.5" />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4 mr-1.5" />
-                  Copy
-                </>
-              )}
-            </Button>
           </div>
-        </div>
+        )}
 
         {/* Members List */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -278,10 +316,7 @@ export default function SharePanel({ isOpen, onClose }) {
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm truncate">
                       {member.username}
-                      {(permissions.isOwner && member.user_id === permissions.isOwner) ||
-                        (permissions.isCollaborator && member.user_id === permissions.isCollaborator)
-                        ? " (you)"
-                        : ""}
+                      {member.user_id === currentUserId ? " (you)" : ""}
                     </div>
                     {member.email && (
                       <div className="text-xs text-gray-400 truncate">
@@ -295,9 +330,32 @@ export default function SharePanel({ isOpen, onClose }) {
                   {member.role === "owner" ? (
                     <span className="text-sm text-gray-400 px-3">owner</span>
                   ) : permissions.isOwner ? (
-                    <button className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-[#2B2B30] text-sm text-gray-300">
-                      <EllipsisVertical className="h-4 w-4" />
-                    </button>
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowMemberMenu(showMemberMenu === member.user_id ? null : member.user_id)}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-[#2B2B30] text-sm text-gray-300 cursor-pointer"
+                      >
+                        <EllipsisVertical className="h-4 w-4" />
+                      </button>
+
+                      {showMemberMenu === member.user_id && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setShowMemberMenu(null)}
+                          />
+                          <div className="absolute right-8 top-0 mt-1 w-40 bg-[#2B2B30] border border-[#36363E] rounded-md shadow-xl z-20 ">
+                            <button
+                              onClick={() => handleRemoveClick(member)}
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-[#36363E] flex items-center gap-2 text-red-400 rounded-md"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Remove
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   ) : (
                     <span className="text-sm text-gray-400 px-3">can edit</span>
                   )}
@@ -313,6 +371,15 @@ export default function SharePanel({ isOpen, onClose }) {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteModal
+        isOpen={!!memberToRemove}
+        onClose={() => setMemberToRemove(null)}
+        onConfirm={handleConfirmRemove}
+        title="Remove Collaborator"
+        message={`Are you sure you want to remove ${memberToRemove?.username} from this project? They will lose access to the project immediately.`}
+      />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { debounce } from 'lodash';
 
 
 export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
-  const { onRemoteChange, onRemoteCursor, enabled = true } = options;
+  const { onRemoteChange, onRemoteCursor, enabled = true, canBroadcast = true } = options;
 
   const realtimeService = useRef(null);
   const unsubscribeRef = useRef(null);
@@ -21,6 +21,11 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
   // Debounced broadcast of content changes
   const broadcastContentChange = useCallback(
     debounce((content, version) => {
+      if (!canBroadcast) {
+        console.log('[Collab] Skipping content broadcast - view-only user');
+        return;
+      }
+
       if (!realtimeService.current || !projectId || !fileId || !currentUser.id) {
         return;
       }
@@ -33,12 +38,17 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
         timestamp: Date.now(),
       });
     }, 300),
-    [projectId, fileId, currentUser.id, currentUser.username]
+    [projectId, fileId, currentUser.id, currentUser.username, canBroadcast]
   );
 
   // Broadcast cursor position
   const broadcastCursorPosition = useCallback(
     debounce((position) => {
+      if (!canBroadcast) {
+        // View-only users don't broadcast their cursor
+        return;
+      }
+
       if (!realtimeService.current || !projectId || !fileId || !currentUser.id) {
         console.warn('[Collab] Cannot broadcast cursor - missing data:', {
           hasService: !!realtimeService.current,
@@ -59,7 +69,7 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
         timestamp: Date.now(),
       });
     }, 100),
-    [projectId, fileId, currentUser.id, currentUser.username, currentUser.avatar_url]
+    [projectId, fileId, currentUser.id, currentUser.username, currentUser.avatar_url, canBroadcast]
   );
 
   // Use refs for callbacks to avoid dependency issues

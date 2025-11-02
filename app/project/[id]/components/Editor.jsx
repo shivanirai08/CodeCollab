@@ -65,11 +65,13 @@ const MonacoEditor = () => {
   const currentUserId = useSelector((state) => state.user.id);
   const currentUsername = useSelector((state) => state.user.userName);
 
-  // Collaborative editing hook
+  // Collaborative editing hook - enabled for both view and edit users
+  // View-only users can receive updates but cannot broadcast
   const collaborativeEditing = useCollaborativeEditing(projectId, activeFileId, {
     onRemoteChange: handleRemoteContentChange,
     onRemoteCursor: handleRemoteCursorChange,
-    enabled: permissions.canEdit && !!activeFileId && !!currentUserId,
+    enabled: (permissions.canView || permissions.canEdit) && !!activeFileId && !!currentUserId,
+    canBroadcast: permissions.canEdit, // Only users with edit permission can broadcast
   });
 
   const { broadcastContentChange, broadcastCursorPosition, isApplyingRemoteChange } = collaborativeEditing;
@@ -178,7 +180,6 @@ const MonacoEditor = () => {
 
       cursorDisposableRef.current = editor.onDidChangeCursorPosition((e) => {
         const position = e.position;
-        // console.log('[Editor] Cursor moved to:', position.lineNumber, position.column);
 
         // Broadcast cursor position
         broadcastCursorPosition({
@@ -198,7 +199,6 @@ const MonacoEditor = () => {
   useEffect(() => {
     return () => {
       if (cursorDisposableRef.current) {
-        console.log('[Editor] Cleaning up cursor tracking');
         cursorDisposableRef.current.dispose();
         cursorDisposableRef.current = null;
       }

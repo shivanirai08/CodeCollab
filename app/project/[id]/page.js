@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchProject, memberProject } from "@/store/ProjectSlice";
+import { fetchProject, memberProject, clearProject } from "@/store/ProjectSlice";
 import { fetchNodes } from "@/store/NodesSlice";
 import { fetchUserInfo } from "@/store/UserSlice";
 import { cn } from "@/lib/utils";
@@ -16,9 +16,11 @@ import EditorTabs from "./components/EditorTabs";
 import ChatPanel from "./components/ChatPanel";
 import TerminalPanel from "./components/Terminal";
 import AccessDeniedModal from "./components/AccessDeniedModal";
+import RemovedFromProjectModal from "./components/RemovedFromProjectModal";
 import { useParams } from "next/navigation";
 import useRealtimeNodes from "@/hooks/useRealtimeNodes";
 import useRealtimePresence from "@/hooks/useRealtimePresence";
+import useRealtimeMembers from "@/hooks/useRealtimeMembers";
 
 export default function ProjectWorkspacePage() {
   const params = useParams();
@@ -34,11 +36,20 @@ export default function ProjectWorkspacePage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [showAccessDenied, setShowAccessDenied] = useState(false);
+  const [showRemovedModal, setShowRemovedModal] = useState(false);
   const [realtimeEnabled, setRealtimeEnabled] = useState(false);
 
-  // Real-time subscriptions for nodes and presence
+  // Handle when current user is removed from project
+  const handleUserRemoved = () => {
+    setRealtimeEnabled(false);  // Disable real-time to stop further updates
+    dispatch(clearProject());   // Clear project state and permissions
+    setShowRemovedModal(true);
+  };
+
+  // Real-time subscriptions for nodes, presence, and members
   useRealtimeNodes(projectId, realtimeEnabled, currentUserId);
   useRealtimePresence(projectId, realtimeEnabled);
+  useRealtimeMembers(projectId, realtimeEnabled, handleUserRemoved);
 
   useEffect(() => {
     // Fetch user info first for presence tracking
@@ -87,6 +98,16 @@ export default function ProjectWorkspacePage() {
       }
     }
   }, [projectStatus, permissions, projectError]);
+
+  // Removed from project modal (takes priority)
+  if (showRemovedModal) {
+    return (
+      <RemovedFromProjectModal
+        isOpen={true}
+        projectName={projectname || "this project"}
+      />
+    );
+  }
 
   // Access denied modal
   if (showAccessDenied) {

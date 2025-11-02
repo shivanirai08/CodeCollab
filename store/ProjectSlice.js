@@ -163,6 +163,44 @@ const projectSlice = createSlice({
     updateOnlineUsers: (state, action) => {
       state.onlineUsers = action.payload;
     },
+    // Real-time member changes
+    handleRemoteMemberInsert: (state, action) => {
+      const newMember = action.payload;
+      console.log('[ProjectSlice] Adding new member:', newMember);
+
+      if (newMember.role === 'owner') {
+        // Update owner if needed (shouldn't happen normally)
+        state.owner = newMember;
+      } else if (newMember.role === 'collaborator') {
+        // Check if collaborator already exists
+        const exists = state.collaborators.some(
+          (collab) => collab.user_id === newMember.user_id
+        );
+        if (!exists) {
+          state.collaborators.push(newMember);
+        }
+      }
+    },
+    handleRemoteMemberDelete: (state, action) => {
+      const deletedMember = action.payload;
+      state.collaborators = state.collaborators.filter(
+        (collab) => collab.user_id !== deletedMember.user_id
+      );
+    },
+    handleRemoteMemberUpdate: (state, action) => {
+      const updatedMember = action.payload;
+
+      if (updatedMember.role === 'owner') {
+        state.owner = updatedMember;
+      } else if (updatedMember.role === 'collaborator') {
+        const index = state.collaborators.findIndex(
+          (collab) => collab.user_id === updatedMember.user_id
+        );
+        if (index !== -1) {
+          state.collaborators[index] = updatedMember;
+        }
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -258,5 +296,11 @@ const projectSlice = createSlice({
   },
 });
 
-export const { clearProject, updateOnlineUsers } = projectSlice.actions;
+export const {
+  clearProject,
+  updateOnlineUsers,
+  handleRemoteMemberInsert,
+  handleRemoteMemberDelete,
+  handleRemoteMemberUpdate
+} = projectSlice.actions;
 export default projectSlice.reducer;
