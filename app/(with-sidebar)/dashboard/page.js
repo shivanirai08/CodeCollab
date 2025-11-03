@@ -19,14 +19,14 @@ export default function DashboardPage() {
   return (
     <>
         {/* Welcome */}
-        <div className="mb-3 text-2xl font-semibold">
+        <div className="mb-3 text-xl md:text-2xl font-semibold">
           Welcome back, {userName || "User"} !
         </div>
-        <div className="mb-4 text-base text-white/70">Recent Projects</div>
+        <div className="mb-4 text-sm md:text-base text-white/70">Recent Projects</div>
 
         {/* Cards */}
         <section
-         className="flex flex-row flex-wrap gap-6"
+         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6"
         >
           {Projects.map((p) => (
             <ProjectCard

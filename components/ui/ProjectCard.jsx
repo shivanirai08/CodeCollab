@@ -15,11 +15,11 @@ export default function ProjectCard({
   const router = useRouter();
   return (
     <div
-      className="group relative flex flex-col rounded-xl border bg-[#202026] 
-  border-t-[#36363E] border-b-[#121212] border-r-[#121212] border-l-[#36363E] 
-  hover:border-b-[#36363E] hover:border-r-[#36363E] hover:border-t-[#36363E] hover:border-l-[#36363E] 
-  transition-colors shadow-md shadow-[rgba(2,2,9,0.25)] 
-  px-4 py-4 max-w-[300px] min-w-[250px] w-full cursor-pointer"
+      className="group relative flex flex-col rounded-xl border bg-[#202026]
+  border-t-[#36363E] border-b-[#121212] border-r-[#121212] border-l-[#36363E]
+  hover:border-b-[#36363E] hover:border-r-[#36363E] hover:border-t-[#36363E] hover:border-l-[#36363E]
+  transition-colors shadow-md shadow-[rgba(2,2,9,0.25)]
+  px-3 md:px-4 py-3 md:py-4 w-full cursor-pointer"
       onClick={() => {
         router.push(`/project/${id}`);
       }}
