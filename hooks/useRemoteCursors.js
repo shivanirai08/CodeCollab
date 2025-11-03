@@ -11,7 +11,7 @@ export const useRemoteCursors = (editorRef, monaco, remoteCursors) => {
     const model = editor.getModel();
     if (!model) return;
 
-    console.log('[Editor] Rendering remote cursors:', Object.keys(remoteCursors).length, remoteCursors);
+    console.log('[useRemoteCursors] Rendering remote cursors:', Object.keys(remoteCursors).length, remoteCursors);
 
     // Get current remote cursor user IDs
     const currentUserIds = new Set(Object.keys(remoteCursors));
@@ -122,15 +122,24 @@ export const useRemoteCursors = (editorRef, monaco, remoteCursors) => {
       decorationsRef.current,
       newDecorations
     );
+  }, [remoteCursors, monaco, editorRef]);
 
-    // Cleanup function
+  // Cleanup only on unmount
+  useEffect(() => {
     return () => {
-      // Remove all widgets when component unmounts or cursors change
-      for (const widget of cursorWidgetsRef.current.values()) {
-        editor.removeContentWidget(widget);
+      if (editorRef.current) {
+        // Remove all widgets when component unmounts
+        for (const widget of cursorWidgetsRef.current.values()) {
+          try {
+            editorRef.current.removeContentWidget(widget);
+          } catch (e) {
+            // Widget might already be removed
+          }
+        }
+        cursorWidgetsRef.current.clear();
       }
     };
-  }, [remoteCursors, monaco, editorRef]);
+  }, [editorRef]);
 
   return null;
 };

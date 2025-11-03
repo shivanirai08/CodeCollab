@@ -7,6 +7,7 @@ const initialState = {
   openFiles: [],
   fileContents: {},
   remoteCursors: {}, // { fileId: { userId: { username, position, color, timestamp } } }
+  lockedLines: {}, // { fileId: { lineNumber: { userId, username, timestamp } } }
   status: "idle",
   error: null,
 };
@@ -233,6 +234,55 @@ const nodesSlice = createSlice({
       const fileId = action.payload;
       delete state.remoteCursors[fileId];
     },
+    // Lock a line for editing
+    lockLine: (state, action) => {
+      const { fileId, lineNumber, userId, username } = action.payload;
+
+      if (!state.lockedLines[fileId]) {
+        state.lockedLines[fileId] = {};
+      }
+
+      state.lockedLines[fileId][lineNumber] = {
+        userId,
+        username,
+        timestamp: Date.now(),
+      };
+    },
+    // Unlock a line
+    unlockLine: (state, action) => {
+      const { fileId, lineNumber, userId } = action.payload;
+
+      if (state.lockedLines[fileId]?.[lineNumber]?.userId === userId) {
+        delete state.lockedLines[fileId][lineNumber];
+
+        // Clean up empty file entries
+        if (Object.keys(state.lockedLines[fileId]).length === 0) {
+          delete state.lockedLines[fileId];
+        }
+      }
+    },
+    // Unlock all lines for a specific user
+    unlockUserLines: (state, action) => {
+      const { fileId, userId } = action.payload;
+
+      if (state.lockedLines[fileId]) {
+        Object.keys(state.lockedLines[fileId]).forEach((lineNumber) => {
+          if (state.lockedLines[fileId][lineNumber].userId === userId) {
+            delete state.lockedLines[fileId][lineNumber];
+          }
+        });
+
+        // Clean up empty file entries
+        if (Object.keys(state.lockedLines[fileId]).length === 0) {
+          delete state.lockedLines[fileId];
+        }
+      }
+    },
+    // Clear all locked lines for a file
+    clearLockedLinesForFile: (state, action) => {
+      const fileId = action.payload;
+      delete state.lockedLines[fileId];
+    },
     // Real-time actions for handling changes from other users
     handleRemoteNodeInsert: (state, action) => {
       const newNode = action.payload;
@@ -390,6 +440,10 @@ export const {
   updateRemoteCursor,
   removeRemoteCursor,
   clearRemoteCursorsForFile,
+  lockLine,
+  unlockLine,
+  unlockUserLines,
+  clearLockedLinesForFile,
   handleRemoteNodeInsert,
   handleRemoteNodeUpdate,
   handleRemoteNodeDelete

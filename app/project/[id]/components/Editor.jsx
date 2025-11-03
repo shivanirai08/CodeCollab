@@ -3,11 +3,12 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
 import Editor, { useMonaco } from "@monaco-editor/react";
 import { useSelector, useDispatch } from "react-redux";
-import { updateLocalContent, updateFileContent, updateRemoteCursor, clearRemoteCursorsForFile } from "@/store/NodesSlice";
+import { updateLocalContent, updateFileContent, updateRemoteCursor, removeRemoteCursor, clearRemoteCursorsForFile, lockLine, unlockLine, unlockUserLines, clearLockedLinesForFile } from "@/store/NodesSlice";
 import { debounce } from "lodash";
 import { toast } from "sonner";
 import useCollaborativeEditing from "@/hooks/useCollaborativeEditing";
 import useRemoteCursors from "@/hooks/useRemoteCursors";
+import useLineLocks from "@/hooks/useLineLocks";
 import { useParams } from "next/navigation";
 
 const MonacoEditor = () => {
@@ -17,12 +18,19 @@ const MonacoEditor = () => {
   const params = useParams();
   const projectId = params.id;
   const [versionCounter, setVersionCounter] = useState(0);
+  const currentLockedLineRef = useRef(null);
+  const lockTimeoutRef = useRef(null);
+  const contentChangeDisposableRef = useRef(null);
+  const lockedLinesRef = useRef({});
+  const isApplyingRemoteChangeCheckRef = useRef(null);
+  const lastToastTimeRef = useRef({}); // Track last toast time per line
 
   const activeFileId = useSelector((state) => state.nodes.activeFileId);
   const nodes = useSelector((state) => state.nodes.nodes);
   const fileContents = useSelector((state) => state.nodes.fileContents);
   const permissions = useSelector((state) => state.project.permissions);
   const remoteCursors = useSelector((state) => state.nodes.remoteCursors[activeFileId] || {});
+  const lockedLines = useSelector((state) => state.nodes.lockedLines[activeFileId] || {});
   const isReadOnly = !permissions.canEdit;
 
   // Get active file details
@@ -61,6 +69,54 @@ const MonacoEditor = () => {
     }));
   }, [dispatch, activeFileId]);
 
+  const handleLineLock = useCallback((data) => {
+    if (!activeFileId) return;
+
+    console.log('[Editor] Remote line lock:', data.username, data.lineNumber);
+
+    dispatch(lockLine({
+      fileId: activeFileId,
+      lineNumber: data.lineNumber,
+      userId: data.userId,
+      username: data.username,
+    }));
+  }, [dispatch, activeFileId]);
+
+  const handleLineUnlock = useCallback((data) => {
+    if (!activeFileId) return;
+
+    console.log('[Editor] Remote line unlock:', data.lineNumber);
+
+    dispatch(unlockLine({
+      fileId: activeFileId,
+      lineNumber: data.lineNumber,
+      userId: data.userId,
+    }));
+
+    // Clear the toast cooldown for this line when it's unlocked
+    if (lastToastTimeRef.current[data.lineNumber]) {
+      delete lastToastTimeRef.current[data.lineNumber];
+    }
+  }, [dispatch, activeFileId]);
+
+  const handleUserLeaveFile = useCallback((data) => {
+    if (!activeFileId) return;
+
+    console.log('[Editor] User left file:', data.username, data.userId);
+
+    // Remove cursor for this user
+    dispatch(removeRemoteCursor({
+      fileId: activeFileId,
+      userId: data.userId,
+    }));
+
+    // Unlock all lines locked by this user
+    dispatch(unlockUserLines({
+      fileId: activeFileId,
+      userId: data.userId,
+    }));
+  }, [dispatch, activeFileId]);
+
   // Get current user info to ensure it's loaded
   const currentUserId = useSelector((state) => state.user.id);
   const currentUsername = useSelector((state) => state.user.userName);
@@ -70,11 +126,14 @@ const MonacoEditor = () => {
   const collaborativeEditing = useCollaborativeEditing(projectId, activeFileId, {
     onRemoteChange: handleRemoteContentChange,
     onRemoteCursor: handleRemoteCursorChange,
+    onLineLock: handleLineLock,
+    onLineUnlock: handleLineUnlock,
+    onUserLeaveFile: handleUserLeaveFile,
     enabled: (permissions.canView || permissions.canEdit) && !!activeFileId && !!currentUserId,
     canBroadcast: permissions.canEdit, // Only users with edit permission can broadcast
   });
 
-  const { broadcastContentChange, broadcastCursorPosition, isApplyingRemoteChange } = collaborativeEditing;
+  const { broadcastContentChange, broadcastCursorPosition, broadcastLineLock, broadcastLineUnlock, isApplyingRemoteChange } = collaborativeEditing;
 
 
   // Debounced save to database
@@ -118,18 +177,52 @@ const MonacoEditor = () => {
     };
   }, [debouncedSave]);
 
-  // Clear remote cursors when switching files
+  // Clear remote cursors and locked lines when switching files
   useEffect(() => {
     if (activeFileId) {
-      // Clear old cursors when switching files
+      // Clear old cursors and locked lines when switching files
       return () => {
         dispatch(clearRemoteCursorsForFile(activeFileId));
+        dispatch(clearLockedLinesForFile(activeFileId));
+
+        // Unlock current user's line when switching files
+        if (currentLockedLineRef.current && broadcastLineUnlock) {
+          broadcastLineUnlock(currentLockedLineRef.current);
+          dispatch(unlockLine({
+            fileId: activeFileId,
+            lineNumber: currentLockedLineRef.current,
+            userId: currentUserId,
+          }));
+        }
+        currentLockedLineRef.current = null;
+
+        // Clear timeout
+        if (lockTimeoutRef.current) {
+          clearTimeout(lockTimeoutRef.current);
+          lockTimeoutRef.current = null;
+        }
+
+        // Clear toast tracking when switching files
+        lastToastTimeRef.current = {};
       };
     }
-  }, [activeFileId, dispatch]);
+  }, [activeFileId, dispatch, broadcastLineUnlock, currentUserId]);
+
+  // Keep lockedLinesRef updated
+  useEffect(() => {
+    lockedLinesRef.current = lockedLines;
+  }, [lockedLines]);
+
+  // Keep isApplyingRemoteChangeCheck updated
+  useEffect(() => {
+    isApplyingRemoteChangeCheckRef.current = isApplyingRemoteChange;
+  }, [isApplyingRemoteChange]);
 
   // Render remote cursors using custom hook
   useRemoteCursors(editorRef, monaco, remoteCursors);
+
+  // Render line locks using custom hook (only show OTHER users' locks, not your own)
+  useLineLocks(editorRef, monaco, lockedLines, currentUserId);
 
   // Setup Monaco theme
   useEffect(() => {
@@ -153,7 +246,7 @@ const MonacoEditor = () => {
   const handleEditorDidMount = (editor) => {
     editorRef.current = editor;
 
-    console.log('[Editor] Editor mounted, setting up cursor tracking...');
+    console.log('[Editor] Editor mounted, setting up cursor tracking and line locking...');
 
     // Add event listener for read-only attempts
     if (isReadOnly) {
@@ -175,7 +268,7 @@ const MonacoEditor = () => {
       });
     }
 
-    // Set up cursor tracking immediately on mount
+    // Set up cursor tracking and line locking
     if (permissions.canEdit && broadcastCursorPosition) {
 
       cursorDisposableRef.current = editor.onDidChangeCursorPosition((e) => {
@@ -187,6 +280,101 @@ const MonacoEditor = () => {
           column: position.column,
         });
       });
+
+      // Set up line locking on content changes
+      contentChangeDisposableRef.current = editor.onDidChangeModelContent((e) => {
+        if (!permissions.canEdit) return;
+
+        const model = editor.getModel();
+        if (!model) return;
+
+        // Skip lock check if we're applying a remote change
+        if (isApplyingRemoteChangeCheckRef.current && isApplyingRemoteChangeCheckRef.current()) {
+          console.log('[Editor] Skipping lock check - applying remote change');
+          return;
+        }
+
+        // Get current locked lines
+        const currentLockedLines = lockedLinesRef.current;
+
+        // Check if any changes were made to locked lines (locked by OTHER users)
+        for (const change of e.changes) {
+          const startLine = change.range.startLineNumber;
+          const endLine = change.range.endLineNumber;
+
+          // Check all affected lines
+          for (let line = startLine; line <= endLine; line++) {
+            if (currentLockedLines[line] && currentLockedLines[line].userId !== currentUserId) {
+              // Show toast only if we haven't shown one for this line in the last 3 seconds
+              const now = Date.now();
+              const lastToastTime = lastToastTimeRef.current[line] || 0;
+              const cooldownPeriod = 3000; // 3 seconds cooldown
+
+              if (now - lastToastTime > cooldownPeriod) {
+                toast.error(`Line ${line} is locked by ${currentLockedLines[line].username}`, {
+                  duration: 2000,
+                });
+                lastToastTimeRef.current[line] = now;
+              }
+
+              // Undo the change
+              model.undo();
+              return;
+            }
+          }
+        }
+
+        const position = editor.getPosition();
+        if (!position) return;
+
+        const lineNumber = position.lineNumber;
+        const currentLocked = currentLockedLineRef.current;
+
+        // Lock the current line if not already locked by this user
+        if (currentLocked !== lineNumber) {
+          // Unlock previous line
+          if (currentLocked && broadcastLineUnlock) {
+            broadcastLineUnlock(currentLocked);
+            dispatch(unlockLine({
+              fileId: activeFileId,
+              lineNumber: currentLocked,
+              userId: currentUserId,
+            }));
+          }
+
+          // Lock new line
+          if (broadcastLineLock) {
+            broadcastLineLock(lineNumber);
+            dispatch(lockLine({
+              fileId: activeFileId,
+              lineNumber,
+              userId: currentUserId,
+              username: currentUsername,
+            }));
+          }
+
+          currentLockedLineRef.current = lineNumber;
+        }
+
+        // Reset auto-unlock timer
+        if (lockTimeoutRef.current) {
+          clearTimeout(lockTimeoutRef.current);
+        }
+
+        // Auto-unlock after 3 seconds of inactivity
+        lockTimeoutRef.current = setTimeout(() => {
+          const lockedLine = currentLockedLineRef.current;
+          if (lockedLine && broadcastLineUnlock) {
+            broadcastLineUnlock(lockedLine);
+            dispatch(unlockLine({
+              fileId: activeFileId,
+              lineNumber: lockedLine,
+              userId: currentUserId,
+            }));
+            currentLockedLineRef.current = null;
+          }
+        }, 3000);
+      });
     } else {
       console.warn('[Editor] Cannot set up cursor tracking:', {
         canEdit: permissions.canEdit,
@@ -195,15 +383,37 @@ const MonacoEditor = () => {
     }
   };
 
-  // Clean up cursor tracking on unmount
+  // Clean up cursor tracking and line locks on unmount
   useEffect(() => {
     return () => {
       if (cursorDisposableRef.current) {
         cursorDisposableRef.current.dispose();
         cursorDisposableRef.current = null;
       }
+
+      if (contentChangeDisposableRef.current) {
+        contentChangeDisposableRef.current.dispose();
+        contentChangeDisposableRef.current = null;
+      }
+
+      // Clear lock timeout
+      if (lockTimeoutRef.current) {
+        clearTimeout(lockTimeoutRef.current);
+        lockTimeoutRef.current = null;
+      }
+
+      // Unlock current line on unmount
+      if (currentLockedLineRef.current && broadcastLineUnlock && activeFileId) {
+        broadcastLineUnlock(currentLockedLineRef.current);
+        dispatch(unlockLine({
+          fileId: activeFileId,
+          lineNumber: currentLockedLineRef.current,
+          userId: currentUserId,
+        }));
+        currentLockedLineRef.current = null;
+      }
     };
-  }, []);
+  }, [broadcastLineUnlock, activeFileId, currentUserId, dispatch]);
 
   // Get language from file extension
   const getLanguageFromFileName = (fileName) => {
@@ -288,6 +498,7 @@ const MonacoEditor = () => {
           selectionHighlight: true,
           occurrencesHighlight: true,
           contextmenu: !isReadOnly,
+          glyphMargin: true, // Enable glyph margin for lock icons
         }}
       />
 
