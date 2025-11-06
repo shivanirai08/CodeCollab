@@ -16,7 +16,7 @@ export default function SettingsPage() {
   const [theme, setTheme] = useState("dark")
 
   const handleSave = () => {
-    alert("Settings saved ✅")
+    alert("Settings saved")
   }
 
   return (

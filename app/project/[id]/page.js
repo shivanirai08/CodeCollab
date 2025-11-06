@@ -11,16 +11,32 @@ import { HiEye } from "react-icons/hi";
 import { Button } from "@/components/ui/button";
 import FileSidebar from "./components/FileSidebar";
 import TopBar from "./components/TopBar";
-import MonacoEditor from "./components/Editor";
 import EditorTabs from "./components/EditorTabs";
-import ChatPanel from "./components/ChatPanel";
-import TerminalPanel from "./components/Terminal";
 import AccessDeniedModal from "./components/AccessDeniedModal";
 import RemovedFromProjectModal from "./components/RemovedFromProjectModal";
 import { useParams } from "next/navigation";
 import useRealtimeNodes from "@/hooks/useRealtimeNodes";
 import useRealtimePresence from "@/hooks/useRealtimePresence";
 import useRealtimeMembers from "@/hooks/useRealtimeMembers";
+import dynamic from "next/dynamic";
+
+// Lazy load heavy components for better performance
+const MonacoEditor = dynamic(() => import("./components/Editor"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full">
+      <div className="text-muted-foreground">Loading editor...</div>
+    </div>
+  ),
+});
+
+const ChatPanel = dynamic(() => import("./components/ChatPanel"), {
+  ssr: false,
+});
+
+const TerminalPanel = dynamic(() => import("./components/Terminal"), {
+  ssr: false,
+});
 
 export default function ProjectWorkspacePage() {
   const params = useParams();
@@ -100,7 +116,7 @@ export default function ProjectWorkspacePage() {
     }
   }, [projectStatus, permissions, projectError]);
 
-  // Removed from project modal (takes priority)
+  // Removed from project modal
   if (showRemovedModal) {
     return (
       <RemovedFromProjectModal
@@ -189,6 +205,8 @@ export default function ProjectWorkspacePage() {
             <ChatPanel
               isChatOpen={isChatOpen}
               onClose={() => setIsChatOpen(false)}
+              projectId={projectId}
+              realtimeEnabled={realtimeEnabled}
             />
           </div>
         </div>
