@@ -197,7 +197,6 @@ export default function TerminalPanel({ isOpen, onClose }) {
               <div className="flex items-center gap-2 text-xs text-[#8D8D98]">
                 <span>{item.timestamp}</span>
                 {item.time && <span>• Time: {item.time}s</span>}
-                {item.memory && <span>• Memory: {item.memory}KB</span>}
               </div>
               <pre
                 className={`whitespace-pre-wrap ${

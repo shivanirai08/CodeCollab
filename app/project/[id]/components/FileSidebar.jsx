@@ -19,7 +19,7 @@ import InlineInput from "./InlineInput";
 import ContextMenu from "./ContextMenu";
 import { toast } from "sonner";
 
-export default function FileSidebar({ className }) {
+export default function FileSidebar({ className, mobileOpen, onClose }) {
   const dispatch = useDispatch();
   const params = useParams();
   const projectId = params.id;
@@ -236,17 +236,43 @@ export default function FileSidebar({ className }) {
 
   return (
     <>
+      {/* Mobile Overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      {/* Sidebar */}
       <aside
         className={cn(
-          "flex h-screen flex-col border-r border-r-[#36363E] bg-[#141419] transition-all duration-300 relative",
-          collapsed ? "w-16 overflow-hidden" : "w-64",
+          "h-screen flex-col border-r border-r-[#36363E] bg-[#141419] transition-all duration-300",
+          // Desktop behavior - always visible
+          "lg:flex",
+          collapsed ? "lg:w-16 overflow-hidden" : "lg:w-64",
+          "lg:relative",
+          // Mobile behavior - hidden by default, shows as drawer
+          "fixed z-50 top-0 left-0",
+          mobileOpen ? "flex w-64" : "hidden",
           className
         )}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 pt-8 pb-6">
+        <div className="flex items-center gap-3 px-4 pt-8 pb-6 relative">
           <Image src="/logo.svg" alt="Logo" width={32} height={32} className="h-6 w-6" />
           {!collapsed && <div className="text-lg font-semibold">CodeCollab</div>}
+          {/* Mobile Close Button */}
+          {mobileOpen && (
+            <button
+              className="lg:hidden absolute top-8 right-4 text-white hover:text-gray-300"
+              onClick={onClose}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Files */}
@@ -341,8 +367,8 @@ export default function FileSidebar({ className }) {
           </div>
         </div>
 
-        {/* Collapse toggle */}
-        <div className="mt-auto flex justify-center p-3">
+        {/* Collapse toggle - Desktop Only */}
+        <div className="mt-auto hidden lg:flex justify-center p-3">
           <Button
             variant="ghost"
             className="flex w-full items-center justify-start gap-2 px-3 py-2 text-sm transition-all hover:bg-[#29292E]"

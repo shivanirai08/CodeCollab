@@ -5,6 +5,7 @@ import nodesReducer from "./NodesSlice";
 import FetchProjectsSlice from "./FetchProjectsSlice";
 import loadingReducer from "./LoadingSlice";
 import UserSlice from "./UserSlice";
+import SearchReducer from "./SearchSlice";
 
 const store = configureStore({
   reducer: {
@@ -14,6 +15,7 @@ const store = configureStore({
     fetchprojects : FetchProjectsSlice,
     loading: loadingReducer,
     user: UserSlice,
+    search: SearchReducer,
   },
 });
 

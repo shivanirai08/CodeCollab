@@ -7,13 +7,14 @@ export const AnimatedBg = () => {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const generated = Array.from({ length: 50 }).map(() => ({
+      // Reduced from 50 to 20 particles for better performance
+      const generated = Array.from({ length: 20 }).map(() => ({
         x: Math.random() * window.innerWidth,
         y: Math.random() * window.innerHeight,
-        opacity: Math.random() * 0.5 + 0.2,
-        duration: Math.random() * 10 + 5,
+        opacity: Math.random() * 0.4 + 0.1,
+        duration: Math.random() * 10 + 8,
         targetY: Math.random() * window.innerHeight,
-        targetOpacity: Math.random() * 0.5 + 0.2,
+        targetOpacity: Math.random() * 0.4 + 0.1,
       }));
       setParticles(generated);
     }
@@ -21,25 +22,12 @@ export const AnimatedBg = () => {
 
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none">
-      {/* Animated gradient overlay */}
-      <motion.div
-        className="absolute inset-0 bg-gradient-glow opacity-30"
-        animate={{
-          scale: [1, 1.1, 1],
-          rotate: [0, 180, 360],
-        }}
-        transition={{
-          duration: 20,
-          repeat: Infinity,
-          ease: "linear",
-        }}
-      />
 
       {/* Floating particles */}
       {particles.map((p, i) => (
         <motion.div
           key={i}
-          className="absolute w-1 h-1 bg-primary rounded-full"
+          className="absolute w-1 h-1 bg-primary rounded-full blur-[0.5px]"
           initial={{
             x: p.x,
             y: p.y,

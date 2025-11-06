@@ -117,3 +117,87 @@ export async function GET(req, { params: paramsPromise }) {
     );
   }
 }
+
+export async function DELETE(req, { params: paramsPromise }) {
+  try {
+    const { id } = await paramsPromise;
+    const supabase = await createClient();
+    const { searchParams } = new URL(req.url);
+    const userIdToRemove = searchParams.get('userId');
+
+    if (!id || !userIdToRemove) {
+      return NextResponse.json(
+        { error: "Project ID and User ID are required" },
+        { status: 400 }
+      );
+    }
+
+    // Get current user
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "You must be logged in" },
+        { status: 401 }
+      );
+    }
+
+    // Check if current user is the owner
+    const { data: currentUserRole } = await supabase
+      .from("project_members")
+      .select("role")
+      .eq("project_id", id)
+      .eq("user_id", user.id)
+      .single();
+
+    if (!currentUserRole || currentUserRole.role !== "owner") {
+      return NextResponse.json(
+        { error: "Only the project owner can remove collaborators" },
+        { status: 403 }
+      );
+    }
+
+    // Check if the user to remove is not the owner
+    const { data: userToRemoveRole } = await supabase
+      .from("project_members")
+      .select("role")
+      .eq("project_id", id)
+      .eq("user_id", userIdToRemove)
+      .single();
+
+    if (userToRemoveRole?.role === "owner") {
+      return NextResponse.json(
+        { error: "Cannot remove the project owner" },
+        { status: 400 }
+      );
+    }
+
+    // Remove the collaborator
+    const { error: deleteError } = await supabase
+      .from("project_members")
+      .delete()
+      .eq("project_id", id)
+      .eq("user_id", userIdToRemove);
+
+    if (deleteError) {
+      console.error("Delete member error:", deleteError);
+      return NextResponse.json(
+        { error: deleteError.message },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Collaborator removed successfully",
+    });
+  } catch (err) {
+    console.error("Error removing collaborator:", err);
+    return NextResponse.json(
+      { error: err.message || "Internal Server Error" },
+      { status: 500 }
+    );
+  }
+}

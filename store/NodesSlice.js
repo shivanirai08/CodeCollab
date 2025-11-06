@@ -6,6 +6,8 @@ const initialState = {
   activeFileId: null,
   openFiles: [],
   fileContents: {},
+  remoteCursors: {}, // { fileId: { userId: { username, position, color, timestamp } } }
+  lockedLines: {}, // { fileId: { lineNumber: { userId, username, timestamp } } }
   status: "idle",
   error: null,
 };
@@ -193,6 +195,155 @@ const nodesSlice = createSlice({
       const { nodeId, content } = action.payload;
       state.fileContents[nodeId] = content;
     },
+    // Update remote cursor position
+    updateRemoteCursor: (state, action) => {
+      const { fileId, userId, username, position, avatar_url } = action.payload;
+
+      if (!state.remoteCursors[fileId]) {
+        state.remoteCursors[fileId] = {};
+      }
+
+      // Generate a consistent color for this user
+      const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2'];
+      const userHash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const color = colors[userHash % colors.length];
+
+      state.remoteCursors[fileId][userId] = {
+        username,
+        position,
+        color,
+        avatar_url,
+        timestamp: Date.now(),
+      };
+    },
+    // Remove remote cursor (when user leaves or stops editing)
+    removeRemoteCursor: (state, action) => {
+      const { fileId, userId } = action.payload;
+
+      if (state.remoteCursors[fileId]) {
+        delete state.remoteCursors[fileId][userId];
+
+        // Clean up empty file entries
+        if (Object.keys(state.remoteCursors[fileId]).length === 0) {
+          delete state.remoteCursors[fileId];
+        }
+      }
+    },
+    // Clear all remote cursors for a file
+    clearRemoteCursorsForFile: (state, action) => {
+      const fileId = action.payload;
+      delete state.remoteCursors[fileId];
+    },
+    // Lock a line for editing
+    lockLine: (state, action) => {
+      const { fileId, lineNumber, userId, username } = action.payload;
+
+      if (!state.lockedLines[fileId]) {
+        state.lockedLines[fileId] = {};
+      }
+
+      state.lockedLines[fileId][lineNumber] = {
+        userId,
+        username,
+        timestamp: Date.now(),
+      };
+    },
+    // Unlock a line
+    unlockLine: (state, action) => {
+      const { fileId, lineNumber, userId } = action.payload;
+
+      if (state.lockedLines[fileId]?.[lineNumber]?.userId === userId) {
+        delete state.lockedLines[fileId][lineNumber];
+
+        // Clean up empty file entries
+        if (Object.keys(state.lockedLines[fileId]).length === 0) {
+          delete state.lockedLines[fileId];
+        }
+      }
+    },
+    // Unlock all lines for a specific user
+    unlockUserLines: (state, action) => {
+      const { fileId, userId } = action.payload;
+
+      if (state.lockedLines[fileId]) {
+        Object.keys(state.lockedLines[fileId]).forEach((lineNumber) => {
+          if (state.lockedLines[fileId][lineNumber].userId === userId) {
+            delete state.lockedLines[fileId][lineNumber];
+          }
+        });
+
+        // Clean up empty file entries
+        if (Object.keys(state.lockedLines[fileId]).length === 0) {
+          delete state.lockedLines[fileId];
+        }
+      }
+    },
+    // Clear all locked lines for a file
+    clearLockedLinesForFile: (state, action) => {
+      const fileId = action.payload;
+      delete state.lockedLines[fileId];
+    },
+    // Real-time actions for handling changes from other users
+    handleRemoteNodeInsert: (state, action) => {
+      const newNode = action.payload;
+      // Check if node already exists (avoid duplicates)
+      const exists = state.nodes.some((n) => n.id === newNode.id);
+      if (!exists) {
+        state.nodes.push(newNode);
+        if (newNode.type === "file") {
+          state.fileContents[newNode.id] = newNode.content || "";
+        }
+      }
+    },
+    handleRemoteNodeUpdate: (state, action) => {
+      const updatedNode = action.payload;
+      const index = state.nodes.findIndex((n) => n.id === updatedNode.id);
+      if (index !== -1) {
+        const oldNode = state.nodes[index];
+        state.nodes[index] = updatedNode;
+
+        // Update file content cache if it's a file and content changed
+        if (updatedNode.type === "file") {
+          // Only update if the file is not currently being edited by the user
+          // or if it's not the active file (to prevent overwriting user's changes)
+          const isActiveFile = state.activeFileId === updatedNode.id;
+          const hasLocalChanges = state.fileContents[updatedNode.id] !== oldNode.content;
+
+          // Update content cache, but mark conflict if user has unsaved changes
+          if (!isActiveFile || !hasLocalChanges) {
+            state.fileContents[updatedNode.id] = updatedNode.content;
+          }
+        }
+      }
+    },
+    handleRemoteNodeDelete: (state, action) => {
+      const deletedNode = action.payload;
+
+      // Handle both cases: full node object or just ID
+      const nodeId = deletedNode?.id || deletedNode;
+
+      if (!nodeId) {
+        console.error('[NodesSlice] handleRemoteNodeDelete: No node ID provided');
+        return;
+      }
+
+      console.log('[NodesSlice] Deleting node:', nodeId);
+
+      const removeNodeAndChildren = (id) => {
+        const children = state.nodes.filter((n) => n.parent_id === id);
+        children.forEach((child) => removeNodeAndChildren(child.id));
+        state.nodes = state.nodes.filter((n) => n.id !== id);
+        delete state.fileContents[id];
+      };
+
+      removeNodeAndChildren(nodeId);
+
+      // Close the file if it was open
+      state.openFiles = state.openFiles.filter((id) => id !== nodeId);
+      if (state.activeFileId === nodeId) {
+        state.activeFileId = state.openFiles[0] || null;
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -281,5 +432,20 @@ const nodesSlice = createSlice({
   },
 });
 
-export const { setActiveFile, closeFile, closeAllFiles, updateLocalContent } = nodesSlice.actions;
+export const {
+  setActiveFile,
+  closeFile,
+  closeAllFiles,
+  updateLocalContent,
+  updateRemoteCursor,
+  removeRemoteCursor,
+  clearRemoteCursorsForFile,
+  lockLine,
+  unlockLine,
+  unlockUserLines,
+  clearLockedLinesForFile,
+  handleRemoteNodeInsert,
+  handleRemoteNodeUpdate,
+  handleRemoteNodeDelete
+} = nodesSlice.actions;
 export default nodesSlice.reducer;
