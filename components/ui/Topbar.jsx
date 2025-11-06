@@ -7,11 +7,19 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { setSearchQuery } from "@/store/SearchSlice";
 
 export default function Topbar({ onMenuClick }) {
   const router = useRouter();
+  const dispatch = useDispatch();
+  const searchValue = useSelector((state) => state.search.searchQuery);
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleSearchChange = (value) => {
+    dispatch(setSearchQuery(value));
+  };
 
     const handleLogout = async () => {
     const res = await fetch('/api/signout', { method: 'POST' })
@@ -32,6 +40,8 @@ export default function Topbar({ onMenuClick }) {
                   placeholder="Search"
                   className="h-12 w-full bg-[#212126] border-none pl-12 pr-12 text-base placeholder:text-white/60"
                   autoFocus
+                  value={searchValue}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                 />
                 <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
                 <button
@@ -59,7 +69,12 @@ export default function Topbar({ onMenuClick }) {
                   <div className="relative flex-1 max-w-xl">
                     {/* Desktop Search - Always Visible */}
                     <div className="hidden lg:block relative w-full">
-                      <Input placeholder="Search" className="h-10 w-full bg-[#212126] border-none pl-11 text-sm placeholder:text-white/60" />
+                      <Input
+                        placeholder="Search"
+                        className="h-10 w-full bg-[#212126] border-none pl-11 text-sm placeholder:text-white/60"
+                        value={searchValue}
+                        onChange={(e) => handleSearchChange(e.target.value)}
+                      />
                       <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
                     </div>
 

@@ -26,6 +26,34 @@ export const FetchAllProjects = createAsyncThunk(
   }
 );
 
+export const deleteProject = createAsyncThunk(
+  "projects/delete",
+  async (projectId, { rejectWithValue, dispatch }) => {
+    try {
+      dispatch(showLoader("Deleting project"));
+      const res = await fetch("/api/project", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete project");
+      }
+
+      // Refresh projects list after deletion
+      dispatch(FetchAllProjects());
+
+      return { projectId, message: data.message };
+    } catch (error) {
+      return rejectWithValue(error.message);
+    } finally {
+      dispatch(hideLoader());
+    }
+  }
+);
+
 const FetchProjectsSlice = createSlice({
   name: "fetchprojects",
   initialState,
@@ -42,6 +70,16 @@ const FetchProjectsSlice = createSlice({
         state.created = action.payload.filter((p) => p.role === "owner");
       })
       .addCase(FetchAllProjects.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.payload;
+      })
+      .addCase(deleteProject.pending, (state) => {
+        state.status = "deleting";
+      })
+      .addCase(deleteProject.fulfilled, (state) => {
+        state.status = "succeeded";
+      })
+      .addCase(deleteProject.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.payload;
       });
