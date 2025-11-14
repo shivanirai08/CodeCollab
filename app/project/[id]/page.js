@@ -6,7 +6,7 @@ import { fetchProject, memberProject, clearProject } from "@/store/ProjectSlice"
 import { fetchNodes } from "@/store/NodesSlice";
 import { fetchUserInfo } from "@/store/UserSlice";
 import { cn } from "@/lib/utils";
-import { Play } from "lucide-react";
+import { Terminal } from "lucide-react";
 import { HiEye } from "react-icons/hi";
 import { Button } from "@/components/ui/button";
 import FileSidebar from "./components/FileSidebar";
@@ -51,10 +51,17 @@ export default function ProjectWorkspacePage() {
 
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const [terminalTab, setTerminalTab] = useState("output");
   const [showAccessDenied, setShowAccessDenied] = useState(false);
   const [showRemovedModal, setShowRemovedModal] = useState(false);
   const [realtimeEnabled, setRealtimeEnabled] = useState(false);
   const [mobileFileSidebarOpen, setMobileFileSidebarOpen] = useState(false);
+
+  // Function to open terminal and switch to Problems tab
+  const openProblemsTab = () => {
+    setIsTerminalOpen(true);
+    setTerminalTab("problems");
+  };
 
   // Handle when current user is removed from project
   const handleUserRemoved = () => {
@@ -165,7 +172,7 @@ export default function ProjectWorkspacePage() {
             >
               {/* Tabs */}
               <div className="flex items-center gap-2 border-b border-[#36363E] px-2 md:px-3 mb-2 min-w-0 overflow-x-auto">
-                <EditorTabs />
+                <EditorTabs onOpenProblems={openProblemsTab} />
                 <div className="ml-auto flex items-center gap-2">
                   {permissions.canView && !permissions.canEdit && (
                                  <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-500/10 text-yellow-400 rounded-full text-[10px] font-medium">
@@ -180,9 +187,9 @@ export default function ProjectWorkspacePage() {
                         onClick={() => {
                           setIsTerminalOpen(true);
                         }}
-                        title="Run"
+                        title="Terminal"
                       >
-                        <Play className="h-3 w-3 md:h-4 md:w-4" />
+                        <Terminal className="h-3 w-3 md:h-4 md:w-4" />
                       </Button>
                 </div>
               </div>
@@ -194,7 +201,11 @@ export default function ProjectWorkspacePage() {
                   {permissions.canView && (
                     <TerminalPanel
                       isOpen={isTerminalOpen}
-                      onClose={() => setIsTerminalOpen(false)}
+                      onClose={() => {
+                        setIsTerminalOpen(false);
+                        setTerminalTab("output");
+                      }}
+                      initialTab={terminalTab}
                     />
                   )}
                 </div>
