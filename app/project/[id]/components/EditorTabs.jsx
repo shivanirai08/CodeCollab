@@ -27,16 +27,12 @@ export default function EditorTabs({ onOpenProblems }) {
     );
   }
 
-  console.log("EditorTabs - fileProblems from Redux:", fileProblems);
-
   return (
     <div className="flex items-center bg-white/2 overflow-x-auto rounded-t-sm">
       {openFileNodes.map((file) => {
         const problems = fileProblems[file.id] || [];
         const errorCount = problems.filter(p => p.severity === "error").length;
         const warningCount = problems.filter(p => p.severity === "warning").length;
-
-        console.log(`File ${file.name} - errors: ${errorCount}, warnings: ${warningCount}`);
 
         return (
           <Tab
@@ -59,8 +55,6 @@ function Tab({ file, active, errorCount, warningCount, onClick, onClose, onError
   const hasErrors = errorCount > 0;
   const hasWarnings = warningCount > 0;
   const hasProblems = hasErrors || hasWarnings;
-
-  console.log(`Tab ${file.name} - hasProblems: ${hasProblems}, errorCount: ${errorCount}, warningCount: ${warningCount}`);
 
   const handleErrorIndicatorClick = (e) => {
     e.stopPropagation();

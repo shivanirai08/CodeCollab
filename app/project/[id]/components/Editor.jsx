@@ -24,6 +24,8 @@ const MonacoEditor = () => {
   const lockedLinesRef = useRef({});
   const isApplyingRemoteChangeCheckRef = useRef(null);
   const lastToastTimeRef = useRef({}); // Track last toast time per line
+  const isLocalChangeRef = useRef(false); // Track if change is from local user
+  const currentContentRef = useRef(""); // Track current content
 
   const activeFileId = useSelector((state) => state.nodes.activeFileId);
   const nodes = useSelector((state) => state.nodes.nodes);
@@ -42,17 +44,43 @@ const MonacoEditor = () => {
     if (!editorRef.current || !activeFileId) return;
 
     const editor = editorRef.current;
+    const model = editor.getModel();
+    if (!model) return;
+
+    // Get current cursor position and selection
     const currentPosition = editor.getPosition();
+    const currentSelection = editor.getSelection();
 
-    // Apply remote content change
-    dispatch(updateLocalContent({ nodeId: activeFileId, content: data.content }));
+    // Update content using Monaco's API to preserve cursor position
+    const currentValue = model.getValue();
 
-    // Try to preserve cursor position after content update
-    setTimeout(() => {
-      if (currentPosition) {
+    // Only update if content actually changed
+    if (currentValue !== data.content) {
+      // Mark as remote change to prevent broadcasting back
+      isLocalChangeRef.current = false;
+
+      // Use pushEditOperations to update content while preserving undo stack
+      model.pushEditOperations(
+        [],
+        [{
+          range: model.getFullModelRange(),
+          text: data.content
+        }],
+        () => null
+      );
+
+      // Restore cursor position
+      if (currentPosition && currentSelection) {
         editor.setPosition(currentPosition);
+        editor.setSelection(currentSelection);
       }
-    }, 0);
+
+      // Update ref
+      currentContentRef.current = data.content;
+    }
+
+    // Update Redux state (without triggering re-render of value prop)
+    dispatch(updateLocalContent({ nodeId: activeFileId, content: data.content }));
   }, [dispatch, activeFileId]);
 
   const handleRemoteCursorChange = useCallback((data) => {
@@ -150,7 +178,14 @@ const MonacoEditor = () => {
     if (!activeFileId || !permissions.canEdit) return;
 
     // Don't broadcast if we're applying a remote change
-    if (isApplyingRemoteChange()) return;
+    if (isApplyingRemoteChange() || isLocalChangeRef.current === false) {
+      isLocalChangeRef.current = true; // Reset flag
+      return;
+    }
+
+    // Mark as local change
+    isLocalChangeRef.current = true;
+    currentContentRef.current = value;
 
     const newVersion = versionCounter + 1;
     setVersionCounter(newVersion);
@@ -245,6 +280,10 @@ const MonacoEditor = () => {
   // Handle editor mount
   const handleEditorDidMount = (editor) => {
     editorRef.current = editor;
+
+    // Initialize refs
+    isLocalChangeRef.current = true;
+    currentContentRef.current = editor.getValue();
 
     console.log('[Editor] Editor mounted, setting up cursor tracking and line locking...');
 
@@ -469,9 +508,10 @@ const MonacoEditor = () => {
   return (
     <div className="h-full w-full relative">
       <Editor
+        key={activeFileId} // Force remount when switching files
         height="100%"
         language={language}
-        value={content}
+        defaultValue={content} // Use defaultValue instead of value for uncontrolled component
         onChange={handleEditorChange}
         onMount={handleEditorDidMount}
         theme="my-dark"

@@ -70,11 +70,9 @@ export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            console.log("Received analysis message:", data);
 
             if (data.type === "analysis_result") {
               const receivedProblems = data.errors || [];
-              console.log("Setting problems for current file:", receivedProblems);
               setProblems(receivedProblems);
               setIsAnalyzing(false);
             } else if (data.type === "error") {
@@ -125,7 +123,6 @@ export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }
   // Update problems in Redux when they change
   useEffect(() => {
     if (currentFileId && problems.length >= 0) {
-      console.log("Dispatching problems to Redux for file:", currentFileId, problems);
       dispatch(setFileProblems({
         fileId: currentFileId,
         problems: problems
@@ -311,17 +308,6 @@ export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }
           {/* Tabs */}
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setActiveTab("output")}
-              className={cn(
-                "px-3 py-1 text-xs font-medium rounded transition-colors",
-                activeTab === "output"
-                  ? "bg-[#1A1A20] text-white"
-                  : "text-[#8D8D98] hover:text-white hover:bg-[#1A1A20]/50"
-              )}
-            >
-              Output
-            </button>
-            <button
               onClick={() => setActiveTab("problems")}
               className={cn(
                 "px-3 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1.5",
@@ -341,6 +327,17 @@ export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }
                   )}
                 </span>
               )}
+            </button>
+            <button
+              onClick={() => setActiveTab("output")}
+              className={cn(
+                "px-3 py-1 text-xs font-medium rounded transition-colors",
+                activeTab === "output"
+                  ? "bg-[#1A1A20] text-white"
+                  : "text-[#8D8D98] hover:text-white hover:bg-[#1A1A20]/50"
+              )}
+            >
+              Output
             </button>
           </div>
           {activeFile && (
