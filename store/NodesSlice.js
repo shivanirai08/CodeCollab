@@ -8,6 +8,7 @@ const initialState = {
   fileContents: {},
   remoteCursors: {}, // { fileId: { userId: { username, position, color, timestamp } } }
   lockedLines: {}, // { fileId: { lineNumber: { userId, username, timestamp } } }
+  fileProblems: {}, // { fileId: [{ line, column, message, severity }] }
   status: "idle",
   error: null,
 };
@@ -283,6 +284,16 @@ const nodesSlice = createSlice({
       const fileId = action.payload;
       delete state.lockedLines[fileId];
     },
+    // Update file problems (linting/syntax errors)
+    setFileProblems: (state, action) => {
+      const { fileId, problems } = action.payload;
+      state.fileProblems[fileId] = problems;
+    },
+    // Clear problems for a file
+    clearFileProblems: (state, action) => {
+      const fileId = action.payload;
+      delete state.fileProblems[fileId];
+    },
     // Real-time actions for handling changes from other users
     handleRemoteNodeInsert: (state, action) => {
       const newNode = action.payload;
@@ -444,6 +455,8 @@ export const {
   unlockLine,
   unlockUserLines,
   clearLockedLinesForFile,
+  setFileProblems,
+  clearFileProblems,
   handleRemoteNodeInsert,
   handleRemoteNodeUpdate,
   handleRemoteNodeDelete
