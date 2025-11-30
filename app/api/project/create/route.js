@@ -1,7 +1,32 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { rateLimit, getClientIp } from "@/lib/rateLimit";
+
+// Rate limiter: 10 project creations per hour per IP
+const limiter = rateLimit({
+  interval: 60 * 60 * 1000, // 1 hour
+  uniqueTokenPerInterval: 100
+});
 
 export async function POST(req) {
+  //Apply rate limiting to prevent spam project creation
+  const ip = getClientIp(req);
+  try {
+    await limiter.check(10, ip);
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Too many projects created. Please try again later.', retryAfter: error.retryAfter },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': error.retryAfter?.toString() || '3600',
+          'X-RateLimit-Limit': '10',
+          'X-RateLimit-Remaining': '0'
+        }
+      }
+    );
+  }
+
   try {
     const supabase = await createClient();
     const body = await req.json();
@@ -20,10 +45,7 @@ export async function POST(req) {
       error: userError,
     } = await supabase.auth.getUser();
 
-    console.log("User:", user);
-
     if (userError || !user) {
-      console.error("User error:", userError);
       return NextResponse.json(
         { error: "Unauthorized - user not found" },
         { status: 401 }
@@ -45,14 +67,11 @@ export async function POST(req) {
       .single();
 
     if (projectError) {
-      console.error("Project creation error:", projectError);
       return NextResponse.json(
         { error: projectError.message || "Failed to create project" },
         { status: 400 }
       );
     }
-
-    console.log("Project created:", projectData);
 
     // Add the owner as a member with 'owner' role
     const { error: memberError } = await supabase
@@ -66,7 +85,6 @@ export async function POST(req) {
       ]);
 
     if (memberError) {
-      console.error("Member creation error:", memberError);
       // Don't fail the request, project is already created
     }
 
@@ -78,7 +96,6 @@ export async function POST(req) {
       { status: 201 }
     );
   } catch (err) {
-    console.error("Server error:", err);
     return NextResponse.json(
       { error: err.message || "Failed to create project" },
       { status: 500 }

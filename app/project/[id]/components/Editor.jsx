@@ -83,10 +83,12 @@ const MonacoEditor = () => {
     dispatch(updateLocalContent({ nodeId: activeFileId, content: data.content }));
   }, [dispatch, activeFileId]);
 
+  /**
+   * Handle remote cursor position updates from other collaborators
+   * Updates Redux to show colored cursors with usernames in the editor
+   */
   const handleRemoteCursorChange = useCallback((data) => {
     if (!activeFileId) return;
-
-    console.log('[Editor] Remote cursor update:', data.username, data.position);
 
     dispatch(updateRemoteCursor({
       fileId: activeFileId,
@@ -97,10 +99,12 @@ const MonacoEditor = () => {
     }));
   }, [dispatch, activeFileId]);
 
+  /**
+   * Handle remote line lock events
+   * Shows lock icon in gutter when another user is editing a line
+   */
   const handleLineLock = useCallback((data) => {
     if (!activeFileId) return;
-
-    console.log('[Editor] Remote line lock:', data.username, data.lineNumber);
 
     dispatch(lockLine({
       fileId: activeFileId,
@@ -110,10 +114,12 @@ const MonacoEditor = () => {
     }));
   }, [dispatch, activeFileId]);
 
+  /**
+   * Handle remote line unlock events
+   * Removes lock icon when user moves away from the line
+   */
   const handleLineUnlock = useCallback((data) => {
     if (!activeFileId) return;
-
-    console.log('[Editor] Remote line unlock:', data.lineNumber);
 
     dispatch(unlockLine({
       fileId: activeFileId,
@@ -127,10 +133,12 @@ const MonacoEditor = () => {
     }
   }, [dispatch, activeFileId]);
 
+  /**
+   * Handle user leaving file event
+   * Cleans up their cursor and releases all their line locks
+   */
   const handleUserLeaveFile = useCallback((data) => {
     if (!activeFileId) return;
-
-    console.log('[Editor] User left file:', data.username, data.userId);
 
     // Remove cursor for this user
     dispatch(removeRemoteCursor({
@@ -277,15 +285,16 @@ const MonacoEditor = () => {
   // Store cursor tracking disposable
   const cursorDisposableRef = useRef(null);
 
-  // Handle editor mount
+  /**
+   * Handle editor mount event
+   * Sets up cursor tracking, line locking, and read-only mode restrictions
+   */
   const handleEditorDidMount = (editor) => {
     editorRef.current = editor;
 
     // Initialize refs
     isLocalChangeRef.current = true;
     currentContentRef.current = editor.getValue();
-
-    console.log('[Editor] Editor mounted, setting up cursor tracking and line locking...');
 
     // Add event listener for read-only attempts
     if (isReadOnly) {
@@ -327,9 +336,8 @@ const MonacoEditor = () => {
         const model = editor.getModel();
         if (!model) return;
 
-        // Skip lock check if we're applying a remote change
+        // Skip lock check if we're applying a remote change (prevents feedback loop)
         if (isApplyingRemoteChangeCheckRef.current && isApplyingRemoteChangeCheckRef.current()) {
-          console.log('[Editor] Skipping lock check - applying remote change');
           return;
         }
 
@@ -414,12 +422,8 @@ const MonacoEditor = () => {
           }
         }, 3000);
       });
-    } else {
-      console.warn('[Editor] Cannot set up cursor tracking:', {
-        canEdit: permissions.canEdit,
-        hasBroadcast: !!broadcastCursorPosition,
-      });
     }
+    // Note: Cursor tracking requires edit permissions and collaborative editing enabled
   };
 
   // Clean up cursor tracking and line locks on unmount

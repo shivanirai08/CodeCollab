@@ -25,8 +25,17 @@ export default function ProjectsPage() {
     setDisplayLimit(10);
   }, [selectedTab, searchQuery]);
 
-  // Filter projects based on search query
-  const filterProjects = (projectList) => {
+  /**
+   * Filter and memoize projects based on selected tab and search query
+   * Optimizes performance by preventing unnecessary recalculations
+   */
+  const filteredProjects = useMemo(() => {
+    // Determine which project list to use based on selected tab
+    let projectList = projects;
+    if (selectedTab === "created") projectList = created;
+    if (selectedTab === "joined") projectList = joined;
+
+    // Apply search filter if query exists
     if (!searchQuery.trim()) return projectList;
 
     const query = searchQuery.toLowerCase();
@@ -35,12 +44,6 @@ export default function ProjectsPage() {
         project.title?.toLowerCase().includes(query) ||
         project.description?.toLowerCase().includes(query)
     );
-  };
-
-  const filteredProjects = useMemo(() => {
-    if (selectedTab === "all") return filterProjects(projects);
-    if (selectedTab === "created") return filterProjects(created);
-    return filterProjects(joined);
   }, [projects, created, joined, selectedTab, searchQuery]);
 
   // Paginated projects

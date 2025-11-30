@@ -43,6 +43,10 @@ export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }
 
   // Native WebSocket connection for code analysis
   useEffect(() => {
+    const retryCountRef = { current: 0 };
+    const maxRetries = 5;
+    let reconnectTimeoutId = null;
+
     const connectWebSocket = async () => {
       try {
         // Get Supabase session token
@@ -50,21 +54,17 @@ export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }
         const { data: { session }, error } = await supabase.auth.getSession();
 
         if (error || !session) {
-          console.error("Failed to get auth session:", error);
-          toast.error("Authentication required for code analysis");
           return;
         }
 
         const token = session.access_token;
-        const WS_URL = `wss://codeolab.srayansh.me/ws?token=${token}`;
-
-        console.log("Connecting to CodeCollab API via WebSocket...");
+        const WS_URL = `${process.env.NEXT_PUBLIC_WEBSOCKET_URL}?token=${token}`;
 
         const ws = new WebSocket(WS_URL);
 
         ws.onopen = () => {
-          console.log("✓ WebSocket connected to CodeCollab API");
           socketRef.current = ws;
+          retryCountRef.current = 0; // Reset retry counter on successful connection
         };
 
         ws.onmessage = (event) => {
@@ -76,41 +76,43 @@ export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }
               setProblems(receivedProblems);
               setIsAnalyzing(false);
             } else if (data.type === "error") {
-              console.error("Analysis error:", data);
-              toast.error(data.message || "Analysis failed");
               setIsAnalyzing(false);
             }
           } catch (err) {
-            console.error("Error parsing WebSocket message:", err);
+            // Silently handle parsing errors
           }
         };
 
-        ws.onerror = (error) => {
-          console.error("WebSocket error:", error);
-          toast.error("Failed to connect to code analysis service");
+        ws.onerror = () => {
+          // Silently handle connection errors
         };
 
-        ws.onclose = (event) => {
-          console.log("WebSocket disconnected:", event.code, event.reason);
+        ws.onclose = () => {
           socketRef.current = null;
 
-          // Auto-reconnect after 3 seconds
-          setTimeout(() => {
-            if (socketRef.current === null) {
-              connectWebSocket();
-            }
-          }, 3000);
+          // Auto-reconnect with max retry limit
+          if (retryCountRef.current < maxRetries) {
+            reconnectTimeoutId = setTimeout(() => {
+              if (socketRef.current === null) {
+                retryCountRef.current++;
+                connectWebSocket();
+              }
+            }, 3000);
+          }
         };
 
         socketRef.current = ws;
       } catch (err) {
-        console.error("Error setting up WebSocket connection:", err);
+        // Silently handle connection setup errors
       }
     };
 
     connectWebSocket();
 
     return () => {
+      if (reconnectTimeoutId) {
+        clearTimeout(reconnectTimeoutId);
+      }
       if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
         socketRef.current.close();
       }
@@ -156,11 +158,14 @@ export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }
 
   const analyzeCode = (code) => {
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      console.warn("WebSocket not connected");
       return;
     }
 
-    const language = getLanguageFromFileName(activeFile?.name);
+    if (!activeFile?.name) {
+      return;
+    }
+
+    const language = getLanguageFromFileName(activeFile.name);
     setIsAnalyzing(true);
 
     try {
@@ -171,9 +176,7 @@ export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }
       });
 
       socketRef.current.send(message);
-      console.log("Sent analysis request for:", language);
     } catch (error) {
-      console.error("Error sending analysis request:", error);
       setIsAnalyzing(false);
     }
   };

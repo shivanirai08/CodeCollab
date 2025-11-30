@@ -18,15 +18,16 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
     avatar_url: state.user.avatar_url,
   }));
 
-  // Debounced broadcast of content changes
+  /**
+   * Broadcasts content changes to other collaborators with debouncing
+   * Debounced to 300ms to avoid excessive real-time updates during typing
+   * content - The updated file content
+   * version - Version number for conflict resolution
+   */
   const broadcastContentChange = useCallback(
     debounce((content, version) => {
-      if (!canBroadcast) {
-        console.log('[Collab] Skipping content broadcast - view-only user');
-        return;
-      }
-
-      if (!realtimeService.current || !projectId || !fileId || !currentUser.id) {
+      // View-only users cannot broadcast content changes
+      if (!canBroadcast || !realtimeService.current || !projectId || !fileId || !currentUser.id) {
         return;
       }
 
@@ -41,15 +42,15 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
     [projectId, fileId, currentUser.id, currentUser.username, canBroadcast]
   );
 
-  // Broadcast cursor position
+  /**
+   * Broadcasts cursor position to show remote users where you're typing
+   * Debounced to 100ms for smooth cursor tracking without overwhelming the network
+   * position - Monaco editor position {lineNumber, column}
+   */
   const broadcastCursorPosition = useCallback(
     debounce((position) => {
-      if (!canBroadcast) {
-        // View-only users don't broadcast their cursor
-        return;
-      }
-
-      if (!realtimeService.current || !projectId || !fileId || !currentUser.id) {
+      // View-only users don't broadcast their cursor
+      if (!canBroadcast || !realtimeService.current || !projectId || !fileId || !currentUser.id) {
         return;
       }
 
@@ -64,13 +65,15 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
     [projectId, fileId, currentUser.id, currentUser.username, currentUser.avatar_url, canBroadcast]
   );
 
-  // Broadcast line lock
+  /**
+   * Broadcasts line lock to prevent concurrent editing conflicts
+   * When a user starts editing a line, it's locked for other collaborators
+   * lineNumber - The line number being locked
+   */
   const broadcastLineLock = useCallback((lineNumber) => {
     if (!canBroadcast || !realtimeService.current || !projectId || !fileId || !currentUser.id) {
       return;
     }
-
-    console.log('[Collab] Broadcasting line lock:', lineNumber);
 
     realtimeService.current.broadcastLineLock(projectId, fileId, {
       userId: currentUser.id,
@@ -80,13 +83,15 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
     });
   }, [projectId, fileId, currentUser.id, currentUser.username, canBroadcast]);
 
-  // Broadcast line unlock
+  /**
+   * Broadcasts line unlock when user moves to a different line
+   * Allows other collaborators to edit the previously locked line
+   * lineNumber - The line number being unlocked
+   */
   const broadcastLineUnlock = useCallback((lineNumber) => {
     if (!canBroadcast || !realtimeService.current || !projectId || !fileId || !currentUser.id) {
       return;
     }
-
-    console.log('[Collab] Broadcasting line unlock:', lineNumber);
 
     realtimeService.current.broadcastLineUnlock(projectId, fileId, {
       userId: currentUser.id,
@@ -95,13 +100,14 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
     });
   }, [projectId, fileId, currentUser.id, canBroadcast]);
 
-  // Broadcast user leaving file
+  /**
+   * Broadcasts when user leaves the file to release all locks
+   * This cleanup ensures other users can edit all lines
+   */
   const broadcastUserLeaveFile = useCallback(() => {
     if (!realtimeService.current || !projectId || !fileId || !currentUser.id) {
       return;
     }
-
-    console.log('[Collab] Broadcasting user leave file');
 
     realtimeService.current.broadcastUserLeaveFile(projectId, fileId, {
       userId: currentUser.id,
@@ -125,13 +131,16 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
     onUserLeaveFileRef.current = onUserLeaveFile;
   }, [onRemoteChange, onRemoteCursor, onLineLock, onLineUnlock, onUserLeaveFile]);
 
+  /**
+   * Main effect: Sets up real-time collaboration subscriptions for the current file
+   * Subscribes to content changes, cursor movements, line locks/unlocks, and user presence
+   * Uses refs for callbacks to prevent unnecessary re-subscriptions
+   */
   useEffect(() => {
     // Skip if disabled or missing required data
     if (!enabled || !projectId || !fileId || !currentUser.id) {
       return;
     }
-
-    console.log('[Collab] Setting up collaboration for file:', fileId);
 
     // Initialize realtime service
     if (!realtimeService.current) {
@@ -144,30 +153,28 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
       fileId,
       {
         onContentChange: (data) => {
-          // Ignore own changes
+          // Ignore own changes to prevent echo
           if (data.userId === currentUser.id) {
             return;
           }
 
-          // Mark that we're applying a remote change to prevent loops
+          // Mark that we're applying a remote change to prevent update loops
           isApplyingRemoteChangeRef.current = true;
 
-          console.log('[Collab] Remote content change from:', data.username);
           onRemoteChangeRef.current?.(data);
 
-          // Reset flag after a short delay
+          // Reset flag after applying the change
           setTimeout(() => {
             isApplyingRemoteChangeRef.current = false;
           }, 100);
         },
 
         onCursorChange: (data) => {
-          // Ignore own cursor
+          // Ignore own cursor to prevent echo
           if (data.userId === currentUser.id) {
             return;
           }
 
-          console.log('[Collab] Remote cursor change from:', data.username, 'position:', data.position);
           onRemoteCursorRef.current?.(data);
         },
 
@@ -177,7 +184,6 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
             return;
           }
 
-          console.log('[Collab] Remote line lock from:', data.username, 'line:', data.lineNumber);
           onLineLockRef.current?.(data);
         },
 
@@ -187,7 +193,6 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
             return;
           }
 
-          console.log('[Collab] Remote line unlock from:', data.username, 'line:', data.lineNumber);
           onLineUnlockRef.current?.(data);
         },
 
@@ -197,7 +202,6 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
             return;
           }
 
-          console.log('[Collab] User left file:', data.username);
           onUserLeaveFileRef.current?.(data);
         },
       }
@@ -205,10 +209,8 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
 
     unsubscribeRef.current = unsubscribe;
 
-    // Cleanup on unmount or file change
+    // Cleanup: Unsubscribe and cancel pending debounced operations
     return () => {
-      console.log(`[useCollaborativeEditing] Cleaning up collaboration for file:`, fileId);
-
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;

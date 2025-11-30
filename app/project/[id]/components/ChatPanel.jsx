@@ -38,40 +38,36 @@ export default function ChatPanel({ isChatOpen, onClose, projectId, realtimeEnab
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Handle new message from realtime
+  /**
+   * Handle new message from real-time subscription
+   * Prevents duplicate message processing using a Set of processed IDs
+   * Auto-scrolls to bottom when chat is open
+   */
   const handleNewMessage = useCallback((newMessage) => {
-    console.log('[ChatPanel] New message received:', {
-      id: newMessage.id,
-      from: newMessage.username,
-      isProcessed: processedMessageIds.current.has(newMessage.id),
-      timestamp: new Date().toISOString()
-    });
-
-    // Prevent duplicate processing
+    // Prevent duplicate processing (important for avoiding duplicate toasts/renders)
     if (processedMessageIds.current.has(newMessage.id)) {
-      console.log('[ChatPanel] Duplicate message ignored:', newMessage.id);
       return;
     }
 
     processedMessageIds.current.add(newMessage.id);
-    console.log('[ChatPanel] Message marked as processed. Total processed:', processedMessageIds.current.size);
 
-    // Show toast notification if message is from another user
-    if (newMessage.user_id !== currentUser.id) {
-      toast.success(`New message from ${newMessage.username}`,
-        { description: newMessage.message.slice(0, 10) + (newMessage.message.length > 10 ? '...' : ''), duration: 3000 }
-      );
-    }
-
+    // Add message to state if not already present
     setMessages((prev) => {
       if (prev.some(msg => msg.id === newMessage.id)) {
-        console.log('[ChatPanel] Message already in state, skipping add');
         return prev;
       }
-
-      console.log('[ChatPanel] Adding message to state');
       return [...prev, newMessage];
     });
+
+    // Show toast notification for messages from other users
+    if (newMessage.user_id !== currentUser.id) {
+      toast.info(`New message from ${newMessage.username}`, {
+        description: newMessage.message.length > 50 
+          ? newMessage.message.substring(0, 50) + '...' 
+          : newMessage.message,
+        duration: 3000,
+      });
+    }
 
     // Auto-scroll to bottom on new message if chat is open
     if (isChatOpenRef.current) {
@@ -86,18 +82,19 @@ export default function ChatPanel({ isChatOpen, onClose, projectId, realtimeEnab
     handleNewMessage
   );
 
+  /**
+   * Load initial chat messages when chat panel opens
+   * Fetches all existing messages from database only once
+   * Marks fetched messages as processed to prevent duplicate handling
+   */
   useEffect(() => {
     if (isChatOpen && projectId && realtimeEnabled && !hasLoadedMessages.current) {
-      console.log('[ChatPanel] Fetching initial messages...');
       setIsLoading(true);
       fetchMessages().then((data) => {
-        console.log('[ChatPanel] Fetched', data.length, 'messages from database');
-
-        // Mark all fetched messages as processed to prevent duplicate toasts
+        // Mark all fetched messages as processed to prevent duplicate real-time events
         data.forEach(msg => {
           processedMessageIds.current.add(msg.id);
         });
-        console.log('[ChatPanel] Marked', data.length, 'fetched messages as processed');
 
         setMessages(data);
         hasLoadedMessages.current = true;

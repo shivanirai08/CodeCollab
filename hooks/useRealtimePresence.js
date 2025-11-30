@@ -3,7 +3,13 @@ import { useDispatch, useSelector } from 'react-redux';
 import { getRealtimeService } from '@/lib/supabase/realtime';
 import { updateOnlineUsers } from '@/store/ProjectSlice';
 
-
+/**
+ * Custom hook for real-time presence tracking
+ * Broadcasts current user's online status and receives other users' presence
+ * Uses Supabase Presence feature to show who's currently active in the project
+ * projectId - The project ID to track presence for
+ * enabled - Whether to enable presence tracking
+ */
 export const useRealtimePresence = (projectId, enabled = true) => {
   const dispatch = useDispatch();
   const realtimeService = useRef(null);
@@ -27,26 +33,29 @@ export const useRealtimePresence = (projectId, enabled = true) => {
       realtimeService.current = getRealtimeService();
     }
 
-    // Track presence and handle presence sync
+    /**
+     * Track presence using Supabase Presence API
+     * Broadcasts current user's status and syncs with other online users
+     * Used to display online avatars in the project header
+     */
     const unsubscribe = realtimeService.current.trackPresence(
       projectId,
       currentUser,
       (onlineUsers) => {
+        // Update Redux store with list of online users
         dispatch(updateOnlineUsers(onlineUsers));
       }
     );
 
-    // Store unsubscribe function
     unsubscribeRef.current = unsubscribe;
 
     // Cleanup on unmount or when dependencies change
     return () => {
-      console.log(`[useRealtimePresence] Cleaning up presence tracking for project: ${projectId}`);
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;
       }
-      // Clear online users from store
+      // Clear online users from store when leaving
       dispatch(updateOnlineUsers([]));
     };
   }, [projectId, enabled, dispatch, currentUser.id, currentUser.username, currentUser.avatar_url]);

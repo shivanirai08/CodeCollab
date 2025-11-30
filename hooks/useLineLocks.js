@@ -1,5 +1,14 @@
 import { useEffect, useRef } from 'react';
 
+/**
+ * Custom hook for rendering line-level locks in Monaco Editor
+ * Prevents editing conflicts by showing which lines are being edited by other users
+ * Displays a lock icon in the gutter and highlights locked lines
+ * editorRef - React ref to Monaco Editor instance
+ * monaco - Monaco editor module
+ * LockedLines - Map of lineNumber -> {userId, username}
+ * currentUserId - Current user's ID (to exclude own locks)
+ */
 export const useLineLocks = (editorRef, monaco, lockedLines, currentUserId) => {
   const decorationsRef = useRef([]);
 
@@ -10,9 +19,9 @@ export const useLineLocks = (editorRef, monaco, lockedLines, currentUserId) => {
     const model = editor.getModel();
     if (!model) return;
 
-    console.log('[useLineLocks] Rendering locked lines:', lockedLines);
-
-    // Create decorations for locked lines (excluding current user's locks)
+    // Create Monaco decorations for locked lines
+    // Shows lock icon in gutter margin with username on hover
+    // Only shows locks from OTHER users (not current user's own locks)
     const newDecorations = Object.entries(lockedLines)
       .filter(([lineNumber, lockData]) => lockData.userId !== currentUserId)
       .map(([lineNumber, lockData]) => {
@@ -31,6 +40,7 @@ export const useLineLocks = (editorRef, monaco, lockedLines, currentUserId) => {
         };
       });
 
+    // Apply decorations using deltaDecorations for efficiency
     decorationsRef.current = editor.deltaDecorations(
       decorationsRef.current,
       newDecorations

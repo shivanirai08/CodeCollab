@@ -166,7 +166,6 @@ const projectSlice = createSlice({
     // Real-time member changes
     handleRemoteMemberInsert: (state, action) => {
       const newMember = action.payload;
-      console.log('[ProjectSlice] Adding new member:', newMember);
 
       if (newMember.role === 'owner') {
         // Update owner if needed (shouldn't happen normally)

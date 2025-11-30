@@ -2,6 +2,13 @@ import { useEffect, useRef, useCallback } from 'react';
 import { getRealtimeService } from '@/lib/supabase/realtime';
 import { createClient } from '@/lib/supabase/client';
 
+/**
+ * Custom hook for real-time chat functionality
+ * Provides methods to fetch, send, and delete messages with real-time updates
+ * projectId - The project ID to subscribe to
+ * enabled - Whether the subscription is active
+ * onNewMessage - Callback when a new message is received
+ */
 export const useRealtimeChat = (projectId, enabled = true, onNewMessage) => {
   const realtimeService = useRef(null);
   const unsubscribeRef = useRef(null);
@@ -15,66 +22,55 @@ export const useRealtimeChat = (projectId, enabled = true, onNewMessage) => {
     onNewMessageRef.current = onNewMessage;
   }, [onNewMessage]);
 
+  /**
+   * Main effect: Subscribes to real-time chat messages for the project
+   * Prevents duplicate subscriptions using isSubscribedRef flag
+   */
   useEffect(() => {
     // Skip if disabled or no project ID
     if (!enabled || !projectId) {
-      console.log('[useRealtimeChat] Subscription skipped:', { enabled, projectId });
       return;
     }
 
     // Prevent duplicate subscription
     if (isSubscribedRef.current) {
-      console.warn('[useRealtimeChat] Already subscribed, skipping duplicate subscription for project:', projectId);
       return;
     }
 
     subscriptionIdRef.current++;
-    const currentSubscriptionId = subscriptionIdRef.current;
-    console.log(`[useRealtimeChat] Starting subscription #${currentSubscriptionId} for project:`, projectId);
 
     // Initialize supabase client and realtime service
     if (!supabase.current) {
       supabase.current = createClient();
-      console.log('[useRealtimeChat] Supabase client created');
     }
 
     if (!realtimeService.current) {
       realtimeService.current = getRealtimeService();
-      console.log('[useRealtimeChat] Realtime service initialized');
     }
 
-    // Mark as subscribed before subscribing
+    // Mark as subscribed before subscribing to prevent race conditions
     isSubscribedRef.current = true;
 
-    // Subscribe to chat messages
+    // Subscribe to chat messages with INSERT and DELETE events
     const unsubscribe = realtimeService.current.subscribeToChatMessages(
       projectId,
       {
         onNewMessage: (message) => {
-          console.log(`[useRealtimeChat] Subscription #${currentSubscriptionId} - Message received:`, {
-            id: message.id,
-            from: message.username,
-            timestamp: new Date().toISOString()
-          });
           onNewMessageRef.current?.(message);
         },
         onDeleteMessage: (message) => {
-          console.log(`[useRealtimeChat] Subscription #${currentSubscriptionId} - Message deleted:`, message);
+          // Delete events are handled in the ChatPanel component
         },
       }
     );
 
-    // Store unsubscribe function
     unsubscribeRef.current = unsubscribe;
-    console.log(`[useRealtimeChat] Subscription #${currentSubscriptionId} established for project:`, projectId);
 
     // Cleanup on unmount or when dependencies change
     return () => {
-      console.log(`[useRealtimeChat] Cleanup triggered for subscription #${currentSubscriptionId}, project: ${projectId}`);
       isSubscribedRef.current = false;
 
       if (unsubscribeRef.current) {
-        console.log(`[useRealtimeChat] Unsubscribing subscription #${currentSubscriptionId}`);
         unsubscribeRef.current();
         unsubscribeRef.current = null;
       }
@@ -94,7 +90,6 @@ export const useRealtimeChat = (projectId, enabled = true, onNewMessage) => {
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.error('[useRealtimeChat] Error fetching messages:', error);
       return [];
     }
 
@@ -122,7 +117,6 @@ export const useRealtimeChat = (projectId, enabled = true, onNewMessage) => {
       .single();
 
     if (error) {
-      console.error('[useRealtimeChat] Error sending message:', error);
       return { success: false, error: error.message };
     }
 
@@ -141,7 +135,6 @@ export const useRealtimeChat = (projectId, enabled = true, onNewMessage) => {
       .eq('id', messageId);
 
     if (error) {
-      console.error('[useRealtimeChat] Error deleting message:', error);
       return { success: false, error: error.message };
     }
 

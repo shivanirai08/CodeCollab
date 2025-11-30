@@ -338,8 +338,6 @@ const nodesSlice = createSlice({
         return;
       }
 
-      console.log('[NodesSlice] Deleting node:', nodeId);
-
       const removeNodeAndChildren = (id) => {
         const children = state.nodes.filter((n) => n.parent_id === id);
         children.forEach((child) => removeNodeAndChildren(child.id));

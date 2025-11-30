@@ -88,13 +88,14 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
     }
   };
 
+  /**
+   * Handle creating a new file or folder
+   * Infers language based on file extension for syntax highlighting
+   */
   const handleCreateNode = async (name) => {
     if (!name || !creatingNode) {
-      console.log("Invalid name or creatingNode:", { name, creatingNode });
       return;
     }
-
-    console.log("Creating node:", { name, creatingNode, projectId });
 
     const language =
       creatingNode.type === "file"
@@ -151,9 +152,11 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
     }
   };
 
+  /**
+   * Handle renaming a file or folder
+   */
   const handleRenameNode = async (newName) => {
     if (!newName || !renamingNode) {
-      console.log("Invalid name or renamingNode:", { newName, renamingNode });
       return;
     }
 
@@ -162,7 +165,6 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
       setRenamingNode(null);
       return;
     }
-    console.log("Renaming node:", { nodeId: renamingNode.nodeId, newName });
     try {
       await dispatch(
         updateNode({
@@ -182,7 +184,6 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
   };
 
   const handleCancelRename = () => {
-    console.log("Cancelling node rename");
     setRenamingNode(null);
   };
 
