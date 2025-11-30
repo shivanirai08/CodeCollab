@@ -1,7 +1,32 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { rateLimit, getClientIp } from '@/lib/rateLimit'
+
+// Rate limiter: 3 signup attempts per 15 minutes per IP
+const limiter = rateLimit({
+  interval: 15 * 60 * 1000, // 15 minutes
+  uniqueTokenPerInterval: 3
+});
 
 export async function POST(req) {
+  // Apply rate limiting to prevent spam signups
+  const ip = getClientIp(req);
+  try {
+    await limiter.check(3, ip);
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Too many signup attempts. Please try again later.', retryAfter: error.retryAfter },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': error.retryAfter?.toString() || '900',
+          'X-RateLimit-Limit': '3',
+          'X-RateLimit-Remaining': '0'
+        }
+      }
+    );
+  }
+
   try {
     const { username, email, password } = await req.json()
 

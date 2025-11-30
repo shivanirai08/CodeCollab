@@ -11,6 +11,10 @@ import {
 /**
  * Hook to subscribe to real-time project member changes
  * Handles INSERT, UPDATE, DELETE events for project_members table
+ * Critical for showing when users are added/removed from the project
+ * projectId - The project ID to monitor
+ * enabled - Whether to enable real-time subscription
+ * onUserRemoved - Callback when current user is removed from project
  */
 export const useRealtimeMembers = (projectId, enabled = false, onUserRemoved) => {
   const dispatch = useDispatch();
@@ -19,15 +23,7 @@ export const useRealtimeMembers = (projectId, enabled = false, onUserRemoved) =>
   const currentUserId = useSelector((state) => state.user.id);
 
   useEffect(() => {
-    console.log('[useRealtimeMembers] Effect triggered:', {
-      enabled,
-      projectId,
-      currentUserId,
-      hasOnUserRemoved: !!onUserRemoved
-    });
-
     if (!enabled || !projectId) {
-      console.log('[useRealtimeMembers] Skipping - not enabled or no projectId');
       return;
     }
 
@@ -36,45 +32,40 @@ export const useRealtimeMembers = (projectId, enabled = false, onUserRemoved) =>
       realtimeService.current = getRealtimeService();
     }
 
-    // Subscribe to project members changes
+    /**
+     * Subscribe to project members changes
+     * - INSERT: When new collaborators are added
+     * - UPDATE: When member roles/permissions change
+     * - DELETE: When members are removed (critical for current user)
+     */
     const unsubscribe = realtimeService.current.subscribeToMembers(projectId, {
       onInsert: async (newMember) => {
         // Fetch full member data including user details
         await dispatch(memberProject(projectId));
       },
-      onDelete: async (deletedMember) => {
-        console.log('[useRealtimeMembers] onDelete callback triggered with:', {
-          deletedMember,
-          currentUserId,
-          isCurrentUser: deletedMember?.user_id === currentUserId,
-          hasOnUserRemoved: !!onUserRemoved
-        });
 
-        // Check if payload has the deleted member data
+      onDelete: async (deletedMember) => {
+        // Validate payload - requires REPLICA IDENTITY FULL on table
         if (!deletedMember || !deletedMember.user_id) {
-          console.error('[useRealtimeMembers] No user_id in DELETE payload. REPLICA IDENTITY FULL may not be set.');
-          // Fallback: refetch to update the list
           await dispatch(memberProject(projectId));
           return;
         }
 
-        // Check if the removed member is the current user
+        // CRITICAL: Check if the removed member is the current user
+        // If yes, trigger modal to show they've been removed
         if (deletedMember.user_id === currentUserId) {
-
-          // Notify parent component that user was removed
           if (onUserRemoved) {
             onUserRemoved();
-          } else {
-            console.error('[useRealtimeMembers] onUserRemoved callback is not defined!');
           }
           return;
         }
 
-        // For other users, refetch the member list to show updated data
+        // For other users being removed, refetch the member list
         await dispatch(memberProject(projectId));
       },
+
       onUpdate: async (updatedMember) => {
-        // Refetch all members to get updated data
+        // Refetch all members to get updated role data
         await dispatch(memberProject(projectId));
       },
     });

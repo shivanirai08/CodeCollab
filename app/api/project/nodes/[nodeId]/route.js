@@ -21,13 +21,11 @@ export async function GET(req, { params }) {
       .single();
 
     if (error) {
-      console.error("Get node error:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     return NextResponse.json({ node: data });
   } catch (err) {
-    console.error("Get node error:", err);
     return NextResponse.json({ error: err.message || "Internal Server Error" }, { status: 500 });
   }
 }
@@ -40,8 +38,6 @@ export async function PATCH(req, { params }) {
     if (!nodeId) {
       return NextResponse.json({ error: "Node id required" }, { status: 400 });
     }
-
-    console.log("Updating node:", nodeId, updates);
 
     const { data, error } = await service
       .from("nodes")
