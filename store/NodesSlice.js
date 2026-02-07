@@ -386,10 +386,8 @@ const nodesSlice = createSlice({
         state.error = null;
       })
       .addCase(createNode.fulfilled, (state, action) => {
-        state.nodes.push(action.payload);
-        if (action.payload.type === "file") {
-          state.fileContents[action.payload.id] = action.payload.content || "";
-        }
+        // Node will be added via real-time subscription (handleRemoteNodeInsert)
+        // This prevents duplicate nodes from being created
         state.error = null;
       })
       .addCase(createNode.rejected, (state, action) => {
