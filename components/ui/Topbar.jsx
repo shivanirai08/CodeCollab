@@ -1,12 +1,13 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import LoadingButton from "@/components/ui/LoadingButton"
 import { Input } from "@/components/ui/input"
-import { Search, Bell, Menu, Plus, X } from "lucide-react"
+import { Search, Bell, Menu, Plus, X, LogOut } from "lucide-react"
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { setSearchQuery } from "@/store/SearchSlice";
 
@@ -16,18 +17,59 @@ export default function Topbar({ onMenuClick }) {
   const searchValue = useSelector((state) => state.search.searchQuery);
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [isJoiningProject, setIsJoiningProject] = useState(false);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [userData, setUserData] = useState(null);
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const res = await fetch('/api/user');
+        const data = await res.json();
+        if (data.user) {
+          setUserData(data.user);
+        }
+      } catch (error) {
+        console.error("Failed to fetch user data:", error);
+      }
+    };
+    fetchUserData();
+  }, []);
 
   const handleSearchChange = (value) => {
     dispatch(setSearchQuery(value));
   };
 
-    const handleLogout = async () => {
-    const res = await fetch('/api/signout', { method: 'POST' })
-    const data = await res.json()
-    if (data.error) alert(data.error)
-    else{
-     toast.success("Logged out successfully!")
-     router.push('/auth/login')}
+  const handleJoinProject = async () => {
+    setIsJoiningProject(true);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    router.push('/joinproject');
+  };
+
+  const handleCreateProject = async () => {
+    setIsCreatingProject(true);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    router.push('/createproject');
+  };
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      const res = await fetch('/api/signout', { method: 'POST' });
+      const data = await res.json();
+      if (data.error) {
+        toast.error(data.error);
+      } else {
+        toast.success("Logged out successfully!");
+      }
+    } catch (error) {
+      toast.error("Failed to logout");
+    } finally {
+      setIsLoggingOut(false);
+      setProfileMenuOpen(false);
+    }
   };
 
     return(
@@ -93,19 +135,23 @@ export default function Topbar({ onMenuClick }) {
 
                   <div className="flex items-center gap-2 md:gap-3">
                     {/* Desktop CTAs */}
-                    <Button
+                    <LoadingButton
                       variant="outline"
                       className="hidden lg:flex border-white text-white hover:bg-white/10 bg-[#121217]"
-                      onClick={()=>{router.push("/joinproject")}}
+                      onClick={handleJoinProject}
+                      loading={isJoiningProject}
+                      loadingText="Joining..."
                     >
                       Join Project
-                    </Button>
-                    <Button
+                    </LoadingButton>
+                    <LoadingButton
                       className="hidden lg:flex bg-gradient-to-b from-[#FFF] to-[#6B696D] text-black"
-                      onClick={()=>{router.push("/createproject")}}
+                      onClick={handleCreateProject}
+                      loading={isCreatingProject}
+                      loadingText="Creating..."
                     >
                       Create Project
-                    </Button>
+                    </LoadingButton>
 
                     {/* Mobile + Button */}
                     <div className="lg:hidden relative">
@@ -130,7 +176,7 @@ export default function Topbar({ onMenuClick }) {
                               className="w-full px-4 py-3 text-left text-sm hover:bg-[#2F2F35] transition-colors border-b border-gray-700"
                               onClick={() => {
                                 setMobileMenuOpen(false);
-                                router.push("/joinproject");
+                                handleJoinProject();
                               }}
                             >
                               Join Project
@@ -139,7 +185,7 @@ export default function Topbar({ onMenuClick }) {
                               className="w-full px-4 py-3 text-left text-sm hover:bg-[#2F2F35] transition-colors"
                               onClick={() => {
                                 setMobileMenuOpen(false);
-                                router.push("/createproject");
+                                handleCreateProject();
                               }}
                             >
                               Create Project
@@ -152,8 +198,69 @@ export default function Topbar({ onMenuClick }) {
                     <Button variant="ghost" size="icon" className="rounded-full bg-[#212126] hover:bg-[#2F2F35] size-10">
                       <Bell className="size-5" />
                     </Button>
-                    <div className="size-10 overflow-hidden rounded-full border border-gray-700 cursor-pointer" onClick={handleLogout}>
-                      <Image src="/thumbnail.svg" alt="avatar" className="h-full w-full object-cover" width={48} height={48} />
+                    
+                    {/* Profile Menu */}
+                    <div className="relative">
+                      <div 
+                        className="size-10 overflow-hidden rounded-full border border-gray-700 cursor-pointer hover:border-gray-500 transition-colors" 
+                        onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                      >
+                        <Image 
+                          src={userData?.avatar_url || "/thumbnail.svg"} 
+                          alt="avatar" 
+                          className="h-full w-full object-cover" 
+                          width={48} 
+                          height={48} 
+                        />
+                      </div>
+
+                      {/* Profile Dropdown */}
+                      {profileMenuOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setProfileMenuOpen(false)}
+                          />
+                          <div className="absolute right-0 top-12 z-50 w-64 rounded-lg bg-[#212126] border border-gray-700 shadow-lg overflow-hidden">
+                            {/* User Info */}
+                            <div className="px-4 py-3 border-b border-gray-700">
+                              <div className="flex items-center gap-3 mb-2">
+                                <div className="size-10 overflow-hidden rounded-full border border-gray-600">
+                                  <Image 
+                                    src={userData?.avatar_url || "/thumbnail.svg"} 
+                                    alt="avatar" 
+                                    className="h-full w-full object-cover" 
+                                    width={40} 
+                                    height={40} 
+                                  />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-white truncate">
+                                    {userData?.username || "User"}
+                                  </p>
+                                  <p className="text-xs text-gray-400 truncate">
+                                    {userData?.email || ""}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Logout Button */}
+                            <div className="p-2">
+                              <LoadingButton
+                                variant="ghost"
+                                className="w-full justify-start text-sm hover:bg-[#2F2F35] text-red-400 hover:text-red-300"
+                                onClick={handleLogout}
+                                loading={isLoggingOut}
+                                loadingText="Logging out..."
+                              >
+                                <LogOut className="size-4 mr-2" />
+                                Logout
+                              </LoadingButton>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
           </div>

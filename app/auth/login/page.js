@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import LoadingButton from "@/components/ui/LoadingButton";
 import { Input } from "@/components/ui/input";
 import Image from "next/image";
 import { toast } from "sonner";
@@ -160,9 +161,14 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <Button className="w-full h-11 shadow-lg">
-          {loading ? "Signing in..." : "Sign in"}
-        </Button>
+        <LoadingButton
+          type="submit"
+          loading={loading}
+          loadingText="Signing in..."
+          className="w-full h-11 shadow-lg"
+        >
+          Sign in
+        </LoadingButton>
 
         <div className="relative flex items-center justify-center">
           <span className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
@@ -184,7 +190,7 @@ export default function LoginPage() {
 
         <p className="text-center text-sm text-gray-400">
           Don&apos;t have an account?{" "}
-          <Button
+          <LoadingButton
             type="button"
             variant="link"
             className="hover:text-white"
@@ -193,7 +199,7 @@ export default function LoginPage() {
             }}
           >
             Create Account
-          </Button>
+          </LoadingButton>
         </p>
       </form>
     </div>

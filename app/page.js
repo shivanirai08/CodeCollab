@@ -2,11 +2,12 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import LoadingButton from "@/components/ui/LoadingButton";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ChevronDown } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense, useCallback } from "react";
 import { RealtimeCollabCard } from "@/components/ui/FeatureCards/RealtimeCollabCard";
 import { SmartEditorCard } from "@/components/ui/FeatureCards/SmartEditorCard";
 import { ProjectManagementCard } from "@/components/ui/FeatureCards/ProjectManagementCard";
@@ -14,12 +15,35 @@ import { ChatCard } from "@/components/ui/FeatureCards/ChatCard";
 import { PermissionsCard } from "@/components/ui/FeatureCards/PermissionsCard";
 import { InstantExecutionCard } from "@/components/ui/FeatureCards/InstantExecutionCard";
 
-// Lazy load below-fold components for better performance
-const Footer = dynamic(() => Promise.resolve(FooterComponent), { ssr: true });
+// Lazy load below-fold components with loading states
+const Footer = dynamic(() => Promise.resolve(FooterComponent), { 
+  ssr: false,
+  loading: () => <div className="h-32 bg-background" /> 
+});
+const EverythingYouNeedSection = dynamic(() => Promise.resolve(EverythingYouNeedSectionComponent), { 
+  ssr: false,
+  loading: () => <div className="h-96 bg-background" />
+});
+const TestimonialsSection = dynamic(() => Promise.resolve(TestimonialsSectionComponent), { 
+  ssr: false,
+  loading: () => <div className="h-96 bg-background" />
+});
+const FAQSection = dynamic(() => Promise.resolve(FAQSectionComponent), { 
+  ssr: false,
+  loading: () => <div className="h-96 bg-background" />
+});
 
 //NAVBAR
 function Navbar() {
   const router = useRouter()
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  const handleNavigation = useCallback(async () => {
+    setIsNavigating(true);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    router.push("/auth/signup");
+  }, [router]);
+
   return (
     <motion.nav 
       className="fixed top-0 left-0 w-full z-50 backdrop-blur-xl bg-background/60 border-b border-border/40"
@@ -71,10 +95,11 @@ function Navbar() {
               </motion.div>
             </div>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button 
+              <LoadingButton
                 variant="default" 
                 className="shadow-md cursor-pointer text-sm md:text-base relative overflow-hidden group" 
-                onClick={() => {router.push("/auth/signup")}}
+                onClick={handleNavigation}
+                loading={isNavigating}
               >
                 <span className="relative z-10">Get Started</span>
                 <motion.div
@@ -83,7 +108,7 @@ function Navbar() {
                   whileHover={{ x: "100%" }}
                   transition={{ duration: 0.6 }}
                 />
-              </Button>
+              </LoadingButton>
             </motion.div>
           </div>
         </div>
@@ -95,6 +120,14 @@ function Navbar() {
 //HERO SECTION
 function Hero() {
   const router = useRouter();
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  const handleGetStarted = useCallback(async () => {
+    setIsNavigating(true);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    router.push("/auth/signup");
+  }, [router]);
+
   return (
     <section className="relative flex flex-col items-center justify-center min-h-screen pt-20 pb-10 md:pt-0 md:pb-0 overflow-hidden">
       <div className="absolute inset-0 pointer-events-none select-none [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_80%)]" />
@@ -142,7 +175,7 @@ function Hero() {
                 whileHover={{ scale: 1.05 }}
                 transition={{ type: "spring", stiffness: 300 }}
               >
-                Code
+              Code
               </motion.span>{" "}
               <motion.span
                 className="inline-block"
@@ -185,12 +218,11 @@ function Hero() {
                 whileTap={{ scale: 0.95 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
               >
-                <Button
+                <LoadingButton
                   size="lg"
                   className="px-8 py-6 text-base shadow-2xl hover:shadow-primary/30 transition-all w-full sm:w-auto relative overflow-hidden group"
-                  onClick={() => {
-                    router.push("/auth/signup");
-                  }}
+                  onClick={handleGetStarted}
+                  loading={isNavigating}
                 >
                   <span className="relative z-10">Get Started</span>
                   <motion.div
@@ -199,7 +231,7 @@ function Hero() {
                     whileHover={{ x: "100%" }}
                     transition={{ duration: 0.5 }}
                   />
-                </Button>
+                </LoadingButton>
               </motion.div>
               <motion.div
                 whileHover={{ scale: 1.05 }}
@@ -210,8 +242,9 @@ function Hero() {
                   size="lg"
                   variant="outline"
                   className="px-8 py-6 text-base border-border/60 hover:bg-primary/10 transition-all w-full sm:w-auto"
+                  onClick = { () => {}}
                 >
-                  Watch Demo
+                  Explore More
                 </Button>
               </motion.div>
             </motion.div>
@@ -226,11 +259,14 @@ function Hero() {
           >
             <Image
               src="/hero.png"
-              alt="Hero"
+              alt="CodeCollab collaborative coding platform interface"
               width={600}
               height={600}
               className="w-full h-auto max-w-lg drop-shadow-2xl opacity-100"
               priority
+              quality={90}
+              loading="eager"
+              sizes="(max-width: 768px) 100vw, 600px"
             />
           </motion.div>
         </div>
@@ -240,7 +276,7 @@ function Hero() {
 }
 
 // EVERYTHING YOU NEED SECTION
-function EverythingYouNeedSection() {
+function EverythingYouNeedSectionComponent() {
   return (
     <section className="py-20 md:py-28 lg:py-32 relative" id="features">
       <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 md:px-12 lg:px-16">
@@ -382,7 +418,7 @@ const testimonials = [
   },
 ];
 
-function TestimonialsSection() {
+function TestimonialsSectionComponent() {
   const [isHovering, setIsHovering] = useState(false);
 
   return (
@@ -490,16 +526,14 @@ function AutoScrollTestimonials({ paused, testimonials }) {
 
               {/* Testimonial Text */}
               <p className="text-[16px] leading-[24px] text-[#d1d5dc]">
-                "{testimonial.text}"
+                &quot;{testimonial.text}&quot;
               </p>
 
               {/* Author Info */}
               <div className="flex gap-4 items-center pt-4 border-t border-[rgba(255,255,255,0.1)]">
-                <img
-                  src={testimonial.image}
-                  alt={testimonial.name}
-                  className="size-12 rounded-full object-cover"
-                />
+                <div className="size-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center text-white font-semibold">
+                  {testimonial.name.charAt(0)}
+                </div>
                 <div className="flex flex-col">
                   <p className="text-[16px] leading-[20px] text-white font-semibold">
                     {testimonial.name}
@@ -546,7 +580,7 @@ const faqs = [
   },
 ];
 
-function FAQSection() {
+function FAQSectionComponent() {
   const [openIndex, setOpenIndex] = useState(null);
 
   const toggleFAQ = (index) => {
