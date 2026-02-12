@@ -100,9 +100,17 @@ export async function middleware(request) {
   return response;
 }
 
-// Matcher: apply middleware to all relevant routes
+// Matcher: apply middleware to relevant routes only (exclude static files, API routes, and _next)
 export const config = {
   matcher: [
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico, sitemap.xml, robots.txt (public files)
+     * - images and other static assets
+     */
+    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|css|js)$).*)",
     "/",
     "/auth/:path*",
     "/dashboard/:path*",

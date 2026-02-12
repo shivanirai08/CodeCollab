@@ -250,7 +250,11 @@ export default function SignupPage() {
           .
         </label>
 
-        <Button type="submit" className="w-full h-11 shadow-lg">
+        <Button 
+          type="submit" 
+          className="w-full h-11 shadow-lg"
+          disabled={loading}
+        >
           {loading ? "Creating account..." : "Create account"}
         </Button>
 

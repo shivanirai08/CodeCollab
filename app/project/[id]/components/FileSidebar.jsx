@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   HiOutlineFolder,
@@ -23,6 +23,7 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
   const dispatch = useDispatch();
   const params = useParams();
   const projectId = params.id;
+  const router = useRouter();
 
   const nodes = useSelector((state) => state.nodes.nodes);
   const activeFileId = useSelector((state) => state.nodes.activeFileId);
@@ -260,7 +261,7 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
         )}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 pt-8 pb-6 relative">
+        <div className="flex items-center gap-3 px-4 pt-8 pb-6 relative" onClick={() => router.push("/")}>
           <Image src="/logo.svg" alt="Logo" width={32} height={32} className="h-6 w-6" />
           {!collapsed && <div className="text-lg font-semibold">CodeCollab</div>}
           {/* Mobile Close Button */}

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useDispatch } from "react-redux";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import LoadingButton from "@/components/ui/LoadingButton";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -191,19 +192,16 @@ export default function CreateProjectPage() {
             </div>
 
             {/* Create Button */}
-            <Button type="submit" className="w-full mt-6" disabled={isLoading || !formData.projectName.trim()}>
-              {isLoading ? (
-                <>
-                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                  Creating Project...
-                </>
-              ) : (
-                <>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Project
-                </>
-              )}
-            </Button>
+            <LoadingButton
+              type="submit"
+              loading={isLoading}
+              loadingText="Creating Project..."
+              disabled={!formData.projectName.trim()}
+              className="w-full mt-6 flex flex-row items-center justify-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Create Project
+            </LoadingButton>
           </form>
 
           {/* Footer */}
