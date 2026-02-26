@@ -373,48 +373,34 @@ function EverythingYouNeedSectionComponent() {
 const testimonials = [
   {
     id: 1,
-    name: "Sarah Johnson",
-    role: "Lead Developer",
-    company: "TechCorp",
-    image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop",
-    text: "CodeCollab transformed how our team works. The real-time collaboration features are game-changing. We can code together seamlessly, no matter where we are.",
-    rating: 5,
+    name: "Srayansh Gupta",
+    role: "Flutter Developer",
+    text: "Building mobile apps is so much easier now. The live preview and real-time sync makes debugging across devices seamless.",
   },
   {
     id: 2,
-    name: "Michael Chen",
-    role: "Software Engineer",
-    company: "StartupXYZ",
-    image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop",
-    text: "The instant execution and smart editor features save us hours every week. It's like having a superpower for coding collaboration.",
-    rating: 5,
+    name: "Shivansh Goyal",
+    role: "Backend Developer",
+    text: "Perfect for backend development. Testing APIs with my team in real-time, catching bugs faster, and shipping features quicker than ever.",
   },
   {
     id: 3,
-    name: "Emily Rodriguez",
-    role: "Full Stack Developer",
-    company: "DevStudio",
-    image: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop",
-    text: "Best collaborative coding platform I've used. The team chat integration and permission controls make it perfect for our distributed team.",
-    rating: 5,
+    name: "Tripti Sharma",
+    role: "Designer",
+    text: "As a designer, I love how I can collaborate with developers directly. Seeing changes instantly helps us maintain design consistency easily.",
   },
   {
     id: 4,
-    name: "David Kim",
+    name: "David",
     role: "Engineering Manager",
     company: "CloudSystems",
-    image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop",
-    text: "CodeCollab has significantly improved our development workflow. The real-time features are incredibly smooth and reliable.",
-    rating: 5,
+    text: "Managing a team is easier now. I can see everyone contributing in real-time, catch issues early, and keep projects on track effortlessly.",
   },
   {
     id: 5,
     name: "Jessica Taylor",
     role: "Senior Developer",
-    company: "InnovateLabs",
-    image: "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=100&h=100&fit=crop",
-    text: "Finally, a platform that gets collaborative coding right. The interface is intuitive and the performance is outstanding.",
-    rating: 5,
+    text: "The code quality and stability are impressive. Our team maintains high standards while moving faster. It's a game-changer for senior development.",
   },
 ];
 
@@ -502,27 +488,14 @@ function AutoScrollTestimonials({ paused, testimonials }) {
           <motion.div
             key={`testimonial-${index}`}
             whileHover={{ y: -5 }}
-            className="bg-gradient-to-br from-[rgba(33,33,33,0.8)] to-[rgba(17,17,17,0.8)] rounded-[24px] p-8 min-w-[400px] max-w-[400px] shrink-0 relative"
+            className="bg-gradient-to-br from-[rgba(33,33,33,0.8)] to-[rgba(17,17,17,0.8)] rounded-[24px] p-8 min-w-[400px] max-w-[400px] shrink-0 relative flex flex-col justify-between"
           >
             <div
               aria-hidden="true"
               className="absolute border-[0.8px] border-[rgba(255,255,255,0.1)] border-solid inset-0 pointer-events-none rounded-[24px]"
             />
             
-            <div className="flex flex-col gap-6 relative">
-              {/* Rating Stars */}
-              {/* <div className="flex gap-1">
-                {[...Array(testimonial.rating)].map((_, i) => (
-                  <svg
-                    key={i}
-                    className="size-5"
-                    fill="#FFD700"
-                    viewBox="0 0 20 20"
-                  >
-                    <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z" />
-                  </svg>
-                ))}
-              </div> */}
+            <div className="flex flex-col gap-6 relative justify-between h-full">
 
               {/* Testimonial Text */}
               <p className="text-[16px] leading-[24px] text-[#d1d5dc]">
@@ -530,7 +503,7 @@ function AutoScrollTestimonials({ paused, testimonials }) {
               </p>
 
               {/* Author Info */}
-              <div className="flex gap-4 items-center pt-4 border-t border-[rgba(255,255,255,0.1)]">
+              <div className="flex gap-4 items-center pt-4">
                 <div className="size-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center text-white font-semibold">
                   {testimonial.name.charAt(0)}
                 </div>
@@ -539,7 +512,7 @@ function AutoScrollTestimonials({ paused, testimonials }) {
                     {testimonial.name}
                   </p>
                   <p className="text-[12px] leading-[16px] text-[#99a1af]">
-                    {testimonial.role} at {testimonial.company}
+                    {testimonial.role}
                   </p>
                 </div>
               </div>
@@ -705,7 +678,7 @@ function FAQSectionComponent() {
 //FOOTER
 function FooterComponent() {
   return (
-    <footer className="mt-32 py-12 border-t border-white/10 bg-black">
+    <footer className="py-12 bg-black">
       <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 md:px-12 lg:px-16">
         <div className="flex flex-col md:flex-row justify-between items-center gap-8">
           <motion.div
@@ -725,22 +698,16 @@ function FooterComponent() {
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
           >
-            <a href="#" className="text-[#99a1af] hover:text-white transition-colors text-sm">
+            <a href="https://github.com/shivanirai08/CodeCollab?tab=readme-ov-file#-codecollab" className="text-[#99a1af] hover:text-white hover:underline transition-colors text-sm">
               Docs
             </a>
-            <a href="#" className="text-[#99a1af] hover:text-white transition-colors text-sm">
-              Twitter
+            <a href="https://www.linkedin.com/in/shivanirai08" className="text-[#99a1af] hover:text-white hover:underline transition-colors text-sm">
+              LinkedIn
             </a>
-            <a href="#" className="text-[#99a1af] hover:text-white transition-colors text-sm">
+            <a href="https://github.com/shivanirai08" className="text-[#99a1af] hover:text-white hover:underline  transition-colors text-sm">
               GitHub
             </a>
           </motion.div>
-        </div>
-
-        <div className="border-t border-white/10 mt-8 pt-8 text-center">
-          <p className="text-[#99a1af] text-xs">
-            © 2025 CodeCollab. All rights reserved.
-          </p>
         </div>
       </div>
     </footer>

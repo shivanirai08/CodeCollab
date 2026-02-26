@@ -2,7 +2,8 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageSquare, Send } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 
 const initialMessages = [
   { id: 1, user: "Alex", text: "Fixed the bug!", color: "#c27aff", isUser: false },
@@ -10,18 +11,39 @@ const initialMessages = [
   { id: 3, user: "You", text: "Awesome team!", color: "#00d4ff", isUser: true },
 ];
 
-const typingResponses = [
-  { user: "Alex", text: "Thanks for the help!", color: "#c27aff" },
-  { user: "Sarah", text: "Ready for the next task", color: "#4ecdc4" },
-];
+const assistantNames = ["Alex", "Sarah", "Jordan", "Casey", "Morgan"];
+const assistantColors = ["#c27aff", "#4ecdc4", "#ff6b9d", "#ffa502", "#00d4ff"];
+
+const getRandomAssistant = () => {
+  const randomIndex = Math.floor(Math.random() * assistantNames.length);
+  return {
+    user: assistantNames[randomIndex],
+    color: assistantColors[randomIndex],
+  };
+};
 
 export function ChatCard() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState(initialMessages);
   const [isTyping, setIsTyping] = useState(false);
   const [typingUser, setTypingUser] = useState("");
+  const messagesContainerRef = useRef(null);
+  const prevMessagesLengthRef = useRef(initialMessages.length);
 
-  const handleSend = () => {
+  // Auto-scroll to latest message only when new messages arrive
+  useEffect(() => {
+    // Only scroll if messages were actually added (not on initial mount)
+    if (messages.length > prevMessagesLengthRef.current || isTyping) {
+      setTimeout(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+      }, 0);
+    }
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages, isTyping]);
+
+  const handleSend = async () => {
     if (message.trim()) {
       const newMessage = {
         id: messages.length + 1,
@@ -33,24 +55,51 @@ export function ChatCard() {
       setMessages([...messages, newMessage]);
       setMessage("");
 
-      // Simulate typing response
-      const response = typingResponses[Math.floor(Math.random() * typingResponses.length)];
+      const assistant = getRandomAssistant();
       setIsTyping(true);
-      setTypingUser(response.user);
+      setTypingUser(assistant.user);
 
-      setTimeout(() => {
+      try {
+        const userMessage = message;
+        const res = await fetch("/api/dashboard/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ message: userMessage }),
+        });
+
+        const data = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to get response");
+        }
+        
         setIsTyping(false);
         setMessages((prev) => [
           ...prev,
           {
             id: prev.length + 1,
-            user: response.user,
-            text: response.text,
-            color: response.color,
+            user: assistant.user,
+            text: data.reply,
+            color: assistant.color,
             isUser: false,
           },
         ]);
-      }, 1500);
+      } catch (error) {
+        console.error("Error calling chat API:", error);
+        setIsTyping(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: prev.length + 1,
+            user: assistant.user,
+            text: error.message || "Sorry, I couldn't process your message. Please try again.",
+            color: "#ff6b6b",
+            isUser: false,
+          },
+        ]);
+      }
     }
   };
 
@@ -62,9 +111,10 @@ export function ChatCard() {
       transition={{ duration: 0.6, delay: 0.3 }}
       className="rounded-2xl overflow-hidden bg-gradient-to-br from-white/[0.08] to-white/[0.03] border border-white/10 hover:border-white/20 transition-all backdrop-blur-xl h-full"
     >
-      <div className="p-6 md:p-8 h-full flex flex-col">
+      <div className="p-6 md:p-8 h-full flex flex-col justify-between">
+        <div className="flex flex-col flex-1">
         {/* Header */}
-        <div className="mb-4">
+        <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <div className="p-3 rounded-lg bg-white/10 border border-white/20">
@@ -75,14 +125,6 @@ export function ChatCard() {
                 <p className="text-xs md:text-sm text-muted-foreground">Communicate instantly</p>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              <motion.div
-                animate={{ scale: [1, 1.2, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="w-2 h-2 rounded-full bg-green-400"
-              />
-              <span className="text-xs text-muted-foreground">Online</span>
-            </div>
           </div>
           <p className="text-xs md:text-sm text-muted-foreground">
             Stay connected with your team through real-time messaging
@@ -90,7 +132,7 @@ export function ChatCard() {
         </div>
 
         {/* Messages */}
-        <div className="h-120 space-y-3 mb-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+        <div ref={messagesContainerRef} className="h-100 space-y-3 mb-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
           <AnimatePresence mode="popLayout">
             {messages.map((msg, index) => (
               <motion.div
@@ -102,7 +144,6 @@ export function ChatCard() {
                 className={`flex ${msg.isUser ? "justify-end" : "justify-start"}`}
               >
                 <motion.div
-                  whileHover={{ scale: 1.02 }}
                   className={`max-w-[80%] rounded-lg px-3 py-2 ${
                     msg.isUser
                       ? "bg-blue-500/30 border border-blue-400/50 text-white"
@@ -114,7 +155,30 @@ export function ChatCard() {
                       {msg.user}
                     </p>
                   )}
-                  <p className="text-xs md:text-sm">{msg.text}</p>
+                  <div className="text-xs md:text-sm max-w-full overflow-hidden">
+                    <ReactMarkdown
+                      components={{
+                        p: ({node, ...props}) => <p className="mb-1 break-words" {...props} />,
+                        strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
+                        em: ({node, ...props}) => <em className="italic" {...props} />,
+                        code: ({node, inline, ...props}) => 
+                          inline ? (
+                            <code className="bg-black/30 px-1 rounded text-cyan-300 break-words" {...props} />
+                          ) : (
+                            <code className="block bg-black/40 px-2 py-1 rounded text-cyan-300 overflow-x-auto whitespace-pre-wrap break-words text-xs" {...props} />
+                          ),
+                        pre: ({node, ...props}) => <pre className="bg-black/40 px-2 py-1 rounded overflow-x-auto whitespace-pre-wrap text-xs" {...props} />,
+                        ul: ({node, ...props}) => <ul className="list-disc list-inside mb-1" {...props} />,
+                        ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-1" {...props} />,
+                        li: ({node, ...props}) => <li className="ml-2 break-words" {...props} />,
+                        h1: ({node, ...props}) => <h1 className="font-bold text-sm mb-1 break-words" {...props} />,
+                        h2: ({node, ...props}) => <h2 className="font-bold text-xs mb-1 break-words" {...props} />,
+                        h3: ({node, ...props}) => <h3 className="font-semibold text-xs mb-1 break-words" {...props} />,
+                      }}
+                    >
+                      {msg.text}
+                    </ReactMarkdown>
+                  </div>
                 </motion.div>
               </motion.div>
             ))}
@@ -147,9 +211,10 @@ export function ChatCard() {
               </motion.div>
             )}
           </AnimatePresence>
-
+        </div>
         </div>
 
+        <div>
         {/* Input */}
         <div className="flex gap-2">
           <input
@@ -179,6 +244,7 @@ export function ChatCard() {
         <p className="text-xs text-muted-foreground text-center mt-2">
           {messages.length} messages
         </p>
+        </div>
       </div>
     </motion.div>
   );
