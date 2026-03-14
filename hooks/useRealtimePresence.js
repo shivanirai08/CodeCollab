@@ -15,16 +15,14 @@ export const useRealtimePresence = (projectId, enabled = true) => {
   const realtimeService = useRef(null);
   const unsubscribeRef = useRef(null);
 
-  // Get current user info from Redux
-  const currentUser = useSelector((state) => ({
-    id: state.user.id,
-    username: state.user.userName,
-    avatar_url: state.user.avatar_url,
-  }));
+  // Select primitive fields to avoid returning a new object on each selector call.
+  const currentUserId = useSelector((state) => state.user.id);
+  const currentUsername = useSelector((state) => state.user.userName);
+  const currentAvatarUrl = useSelector((state) => state.user.avatar_url);
 
   useEffect(() => {
     // Skip if disabled, no project ID, or no user ID
-    if (!enabled || !projectId || !currentUser.id) {
+    if (!enabled || !projectId || !currentUserId) {
       return;
     }
 
@@ -40,7 +38,11 @@ export const useRealtimePresence = (projectId, enabled = true) => {
      */
     const unsubscribe = realtimeService.current.trackPresence(
       projectId,
-      currentUser,
+      {
+        id: currentUserId,
+        username: currentUsername,
+        avatar_url: currentAvatarUrl,
+      },
       (onlineUsers) => {
         // Update Redux store with list of online users
         dispatch(updateOnlineUsers(onlineUsers));
@@ -58,7 +60,7 @@ export const useRealtimePresence = (projectId, enabled = true) => {
       // Clear online users from store when leaving
       dispatch(updateOnlineUsers([]));
     };
-  }, [projectId, enabled, dispatch, currentUser.id, currentUser.username, currentUser.avatar_url]);
+  }, [projectId, enabled, dispatch, currentUserId, currentUsername, currentAvatarUrl]);
 
   return {
     isTracking: !!unsubscribeRef.current,

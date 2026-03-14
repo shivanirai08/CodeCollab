@@ -47,8 +47,18 @@ export default function TopBar({ onToggleChat, isChatOpen, onMenuClick }) {
     }
   }, [getRoomInfo, voiceRoomId]);
 
-  // Use voice hook's userId (from WS), fall back to Redux user ID
-  const currentUserId = voiceUserId || reduxUserId || "current-user";
+  // Prefer Redux user ID for stable identity across WS/presence sources.
+  const currentUserId = reduxUserId || voiceUserId || "current-user";
+
+  const isValidDisplayName = (name) => {
+    if (!name) return false;
+    if (name.includes("eyJ")) return false;
+    if (name.startsWith("mock-user-")) return false;
+    if (name.startsWith("anon-")) return false;
+    if (/^User \d+$/i.test(name)) return false;
+    if (/^user$/i.test(name)) return false;
+    return true;
+  };
 
   // Enrich voice participants with actual user data from online presence
   const enrichedParticipants = useMemo(() => {
@@ -57,11 +67,10 @@ export default function TopBar({ onToggleChat, isChatOpen, onMenuClick }) {
       
       // Get the best available username
       let displayName = p.username;
-      if (onlineUser?.username && !onlineUser.username.includes('eyJ')) {
+      if (isValidDisplayName(onlineUser?.username)) {
         displayName = onlineUser.username;
-      } else if (p.username?.includes('eyJ') || p.username?.startsWith('mock-user-') || p.username?.startsWith('anon-')) {
-        // If we have a token/mock/anon username, try to use just a fallback
-        displayName = onlineUser?.username || 'User';
+      } else if (!isValidDisplayName(p.username)) {
+        displayName = onlineUser?.username || p.username;
       }
       
       return {

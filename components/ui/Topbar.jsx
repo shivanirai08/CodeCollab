@@ -63,6 +63,7 @@ export default function Topbar({ onMenuClick }) {
         toast.error(data.error);
       } else {
         toast.success("Logged out successfully!");
+        router.push("/");
       }
     } catch (error) {
       toast.error("Failed to logout");

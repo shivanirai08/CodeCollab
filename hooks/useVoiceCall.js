@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSelector } from "react-redux";
@@ -57,7 +57,9 @@ export default function useVoiceCall(projectId) {
   const handleWsMessageRef = useRef(null);
   const realtimeServiceRef = useRef(null);
   const pendingIceCandidatesRef = useRef([]);
-  const userCounterRef = useRef(1);
+    // Cache of the latest normalised presence entries so mapServerParticipants
+    // can resolve real usernames even when WS `joined` fires before onSync.
+    const voicePresenceCacheRef = useRef([]);
 
   // Derive a stable room ID from the project
   const roomId = projectId ? `voice-room-${projectId}` : null;
@@ -74,56 +76,158 @@ export default function useVoiceCall(projectId) {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       const message = JSON.stringify(payload);
-      console.log(`[VoiceCall] 📤 SENDING:`, payload);
+      console.log(`[VoiceCall] ðŸ“¤ SENDING:`, payload);
       ws.send(message);
       return true;
     }
-    console.warn("[VoiceCall] ⚠️ WS not open, cannot send:", payload.action);
+    console.warn("[VoiceCall] âš ï¸ WS not open, cannot send:", payload.action);
     return false;
   }, []);
 
-  /** Get friendly username for display */
-  const getFriendlyUsername = useCallback((participant) => {
-    // If we have a real username (not a token or mock-user), use it
-    if (participant.username && 
-        !participant.username.includes('eyJ') && // Not a JWT token
-        !participant.username.startsWith('mock-user-') &&
-        !participant.username.startsWith('anon-')) {
-      return participant.username;
-    }
-    
-    // Otherwise, assign User 1, User 2, etc.
-    return `User ${userCounterRef.current++}`;
+  const isRealUsername = useCallback((username) => {
+    if (!username) return false;
+    if (username.includes("eyJ")) return false;
+    if (username.startsWith("mock-user-")) return false;
+    if (username.startsWith("anon-")) return false;
+    if (/^User \d+$/i.test(username)) return false;
+    if (/^user$/i.test(username)) return false;
+    return true;
   }, []);
+
+  const resolveParticipantUsername = useCallback((...candidates) => {
+    for (const candidate of candidates) {
+      if (isRealUsername(candidate)) return candidate;
+    }
+    return null;
+  }, [isRealUsername]);
 
   /** Deduplicate participants by user_id */
   const deduplicateParticipants = useCallback((participants) => {
     const seen = new Set();
     const unique = [];
     const duplicates = [];
-    
-    // Reset counter for each deduplication
-    userCounterRef.current = 1;
-    
+
     for (const p of participants) {
       if (seen.has(p.user_id)) {
         duplicates.push(p.user_id);
       } else {
         seen.add(p.user_id);
-        // Apply friendly username
-        const friendlyName = getFriendlyUsername(p);
-        unique.push({...p, username: friendlyName});
+        unique.push(p);
       }
     }
     
     if (duplicates.length > 0) {
-      console.warn(`[VoiceCall] ⚠️ Filtered ${duplicates.length} duplicate participants:`, duplicates);
+      console.warn(`[VoiceCall] Filtered ${duplicates.length} duplicate participants:`, duplicates);
     }
     
-    console.log(`[VoiceCall] 📊 Final participant count: ${unique.length}`, unique.map(p => `${p.username}(${p.user_id.substring(0, 8)})`));
+    console.log(`[VoiceCall] Final participant count: ${unique.length}`, unique.map(p => `${p.username}(${p.user_id.substring(0, 8)})`));
     
     return unique;
-  }, [getFriendlyUsername]);
+  }, []);
+
+  const mapServerParticipants = useCallback((serverUsers, prevParticipants = []) => {
+    return serverUsers.map((u) => {
+      const existing = prevParticipants.find((p) => p.user_id === u.userId);
+        // Also check the presence cache â€” handles the race where WS `joined`
+        // arrives before the first presence `onSync` populates prevParticipants.
+        const cached = voicePresenceCacheRef.current.find((p) => p.user_id === u.userId);
+
+      return {
+        user_id: u.userId,
+        username: resolveParticipantUsername(
+            existing?.username,
+            cached?.username,
+            u.username
+        ),
+          avatar_url: existing?.avatar_url || cached?.avatar_url || u.avatar_url || null,
+        isMuted: u.isMuted ?? false,
+        isSpeaking: existing?.isSpeaking ?? false,
+      };
+    });
+  }, [resolveParticipantUsername]);
+
+  const normalizePresenceParticipants = useCallback((presenceUsers = []) => {
+    return presenceUsers
+      .filter((u) => {
+        if (!u?.user_id) return false;
+        if (u.user_id.startsWith("mock-user-")) {
+          console.log("[VoiceCall] Filtering out mock user:", u.user_id);
+          return false;
+        }
+        return true;
+      })
+      .map((u) => ({
+        user_id: u.user_id,
+        username: resolveParticipantUsername(u.username),
+        avatar_url: u.avatar_url || null,
+        isSpeaking: false,
+        isMuted: u.isMuted ?? false,
+      }));
+  }, [resolveParticipantUsername]);
+
+  const mergePresenceParticipants = useCallback((prevParticipants, presenceUsers) => {
+    const normalizedPresence = normalizePresenceParticipants(presenceUsers);
+
+    if (normalizedPresence.length === 0) {
+      return isUserInCallRef.current ? prevParticipants : [];
+    }
+
+    // Presence payload is the authoritative source for who is in voice call.
+    // Keep transient UI fields (like speaking) from previous state when possible.
+    const mergedFromPresence = normalizedPresence.map((presenceUser) => {
+      const previous = prevParticipants.find((p) => p.user_id === presenceUser.user_id);
+      return {
+        ...presenceUser,
+        username: resolveParticipantUsername(
+          presenceUser.username,
+          previous?.username
+        ),
+        avatar_url: presenceUser.avatar_url || previous?.avatar_url || null,
+        isSpeaking: previous?.isSpeaking ?? false,
+      };
+    });
+
+    return deduplicateParticipants(mergedFromPresence);
+  }, [deduplicateParticipants, normalizePresenceParticipants, resolveParticipantUsername]);
+
+  const upsertPresenceParticipants = useCallback((prevParticipants, presenceUsers) => {
+    const normalizedPresence = normalizePresenceParticipants(presenceUsers);
+    if (normalizedPresence.length === 0) return prevParticipants;
+
+    const merged = [...prevParticipants];
+
+    normalizedPresence.forEach((presenceUser) => {
+      const existingIndex = merged.findIndex((participant) => participant.user_id === presenceUser.user_id);
+
+      if (existingIndex >= 0) {
+        merged[existingIndex] = {
+          ...merged[existingIndex],
+          username: resolveParticipantUsername(
+            presenceUser.username,
+            merged[existingIndex].username
+          ),
+          avatar_url: presenceUser.avatar_url || merged[existingIndex].avatar_url,
+          isMuted: presenceUser.isMuted ?? merged[existingIndex].isMuted,
+        };
+      } else {
+        merged.push(presenceUser);
+      }
+    });
+
+    return deduplicateParticipants(merged);
+  }, [deduplicateParticipants, normalizePresenceParticipants, resolveParticipantUsername]);
+
+  const removePresenceParticipants = useCallback((prevParticipants, presenceUsers, fallbackUserId) => {
+    const leavingIds = new Set(
+      presenceUsers
+        .map((u) => u?.user_id || fallbackUserId)
+        .filter(Boolean)
+    );
+
+    if (leavingIds.size === 0) return prevParticipants;
+
+    return prevParticipants.filter((participant) => !leavingIds.has(participant.user_id));
+  }, []);
 
   /** Update voice presence in Supabase (so other users can see you in the call) */
   const updateVoicePresence = useCallback(
@@ -183,7 +287,7 @@ export default function useVoiceCall(projectId) {
   /** Initialise WebRTC: get mic, create PeerConnection, create and send offer */
   const initWebRTC = useCallback(async () => {
     try {
-      console.log("[VoiceCall] 🎤 Requesting microphone access...");
+      console.log("[VoiceCall] ðŸŽ¤ Requesting microphone access...");
       
       // Check if getUserMedia is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -191,8 +295,8 @@ export default function useVoiceCall(projectId) {
         const errorMsg = isSecure 
           ? 'getUserMedia not supported in this browser'
           : 'getUserMedia requires HTTPS or localhost. Current URL: ' + window.location.href;
-        console.error("[VoiceCall] ❌", errorMsg);
-        console.error("[VoiceCall] 💡 Solution: Access via https:// or http://localhost:3000");
+        console.error("[VoiceCall] âŒ", errorMsg);
+        console.error("[VoiceCall] ðŸ’¡ Solution: Access via https:// or http://localhost:3000");
         setConnectionError(errorMsg);
         throw new Error(errorMsg);
       }
@@ -207,11 +311,11 @@ export default function useVoiceCall(projectId) {
       });
       localStreamRef.current = stream;
       
-      console.log("[VoiceCall] ✅ Microphone access granted!");
+      console.log("[VoiceCall] âœ… Microphone access granted!");
       const audioTracks = stream.getAudioTracks();
-      console.log(`[VoiceCall] 📊 Audio tracks count: ${audioTracks.length}`);
+      console.log(`[VoiceCall] ðŸ“Š Audio tracks count: ${audioTracks.length}`);
       audioTracks.forEach((track, index) => {
-        console.log(`[VoiceCall] 🎵 Track ${index}: ${track.label} | enabled: ${track.enabled} | muted: ${track.muted} | readyState: ${track.readyState}`);
+        console.log(`[VoiceCall] ðŸŽµ Track ${index}: ${track.label} | enabled: ${track.enabled} | muted: ${track.muted} | readyState: ${track.readyState}`);
       });
 
       // -- Audio analysis for local speaking detection --
@@ -255,12 +359,12 @@ export default function useVoiceCall(projectId) {
         ],
       });
       pcRef.current = pc;
-      console.log("[VoiceCall] ✅ RTCPeerConnection created");
+      console.log("[VoiceCall] âœ… RTCPeerConnection created");
 
       // Add local audio track
       stream.getTracks().forEach((track) => {
         const sender = pc.addTrack(track, stream);
-        console.log(`[VoiceCall] ➕ Added local ${track.kind} track to peer connection`);
+        console.log(`[VoiceCall] âž• Added local ${track.kind} track to peer connection`);
         console.log(`[VoiceCall]    Track ID: ${track.id} | Label: ${track.label}`);
         console.log(`[VoiceCall]    Sender: ${sender ? 'Created successfully' : 'FAILED'}`);
       });
@@ -268,20 +372,20 @@ export default function useVoiceCall(projectId) {
       // 3 - ICE candidate -> forward to server
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          console.log(`[VoiceCall] 🧊 ICE candidate generated: ${event.candidate.type} | ${event.candidate.protocol}`);
+          console.log(`[VoiceCall] ðŸ§Š ICE candidate generated: ${event.candidate.type} | ${event.candidate.protocol}`);
           wsSend({
             action: "ice_candidate",
             roomId: roomIdRef.current,
             candidate: event.candidate.toJSON(),
           });
         } else {
-          console.log("[VoiceCall] 🧊 ICE gathering complete - All candidates sent");
+          console.log("[VoiceCall] ðŸ§Š ICE gathering complete - All candidates sent");
         }
       };
 
       // 4 - Incoming remote tracks -> play audio
       pc.ontrack = (event) => {
-        console.log("[VoiceCall] 🔊 ontrack event fired!");
+        console.log("[VoiceCall] ðŸ”Š ontrack event fired!");
         console.log(`[VoiceCall]    Track kind: ${event.track.kind}`);
         console.log(`[VoiceCall]    Track ID: ${event.track.id}`);
         console.log(`[VoiceCall]    Track label: ${event.track.label}`);
@@ -292,7 +396,7 @@ export default function useVoiceCall(projectId) {
         
         const remoteStream = event.streams[0];
         if (!remoteStream) {
-          console.error("[VoiceCall] ❌ No stream in ontrack event");
+          console.error("[VoiceCall] âŒ No stream in ontrack event");
           return;
         }
         
@@ -303,7 +407,7 @@ export default function useVoiceCall(projectId) {
         // Avoid duplicates
         const existingAudio = document.querySelector(`audio[data-stream-id="${remoteStream.id}"]`);
         if (existingAudio) {
-          console.log("[VoiceCall]    ⚠️ Audio element already exists for this stream, skipping");
+          console.log("[VoiceCall]    âš ï¸ Audio element already exists for this stream, skipping");
           return;
         }
 
@@ -315,44 +419,44 @@ export default function useVoiceCall(projectId) {
         audio.setAttribute("data-stream-id", remoteStream.id);
         document.body.appendChild(audio);
         
-        console.log("[VoiceCall] 🔊 Audio element created and added to DOM");
+        console.log("[VoiceCall] ðŸ”Š Audio element created and added to DOM");
         console.log(`[VoiceCall]    Audio element ID: ${audio.id || 'none'}`);
         console.log(`[VoiceCall]    Audio paused: ${audio.paused}`);
         console.log(`[VoiceCall]    Audio muted: ${audio.muted}`);
         console.log(`[VoiceCall]    Audio volume: ${audio.volume}`);
 
         audio.onloadedmetadata = () => {
-          console.log("[VoiceCall]    ✅ Audio metadata loaded");
+          console.log("[VoiceCall]    âœ… Audio metadata loaded");
           console.log(`[VoiceCall]    Duration: ${audio.duration}`);
         };
 
         audio.onplay = () => {
-          console.log("[VoiceCall]    ✅ Audio element started playing!");
+          console.log("[VoiceCall]    âœ… Audio element started playing!");
         };
 
         audio.onplaying = () => {
-          console.log("[VoiceCall]    ✅ Audio is now playing");
+          console.log("[VoiceCall]    âœ… Audio is now playing");
         };
 
         audio.onerror = (err) => {
-          console.error("[VoiceCall]    ❌ Audio element error:", err);
+          console.error("[VoiceCall]    âŒ Audio element error:", err);
           console.error("[VoiceCall]    Error code:", audio.error?.code);
           console.error("[VoiceCall]    Error message:", audio.error?.message);
         };
 
         audio.onstalled = () => {
-          console.warn("[VoiceCall]    ⚠️ Audio stalled");
+          console.warn("[VoiceCall]    âš ï¸ Audio stalled");
         };
 
         audio.onsuspend = () => {
-          console.warn("[VoiceCall]    ⚠️ Audio suspended");
+          console.warn("[VoiceCall]    âš ï¸ Audio suspended");
         };
 
         audio.play().then(() => {
-          console.log("[VoiceCall]    ✅ Audio play() promise resolved");
+          console.log("[VoiceCall]    âœ… Audio play() promise resolved");
         }).catch((err) => {
-          console.error("[VoiceCall]    ❌ Autoplay blocked or failed:", err.message);
-          console.error("[VoiceCall]    💡 User may need to interact with page first");
+          console.error("[VoiceCall]    âŒ Autoplay blocked or failed:", err.message);
+          console.error("[VoiceCall]    ðŸ’¡ User may need to interact with page first");
         });
       };
 
@@ -360,45 +464,45 @@ export default function useVoiceCall(projectId) {
       pc.onconnectionstatechange = () => {
         if (!isMountedRef.current) return;
         const state = pc.connectionState;
-        console.log(`[VoiceCall] 🔗 Connection state changed: ${state}`);
+        console.log(`[VoiceCall] ðŸ”— Connection state changed: ${state}`);
         
         if (state === "connected") {
-          console.log("[VoiceCall] ✅ WebRTC connection established!");
+          console.log("[VoiceCall] âœ… WebRTC connection established!");
           setConnectionState("connected");
         } else if (state === "failed") {
-          console.error("[VoiceCall] ❌ WebRTC connection failed");
+          console.error("[VoiceCall] âŒ WebRTC connection failed");
           setConnectionState("failed");
         } else if (state === "disconnected") {
-          console.warn("[VoiceCall] ⚠️ WebRTC disconnected");
+          console.warn("[VoiceCall] âš ï¸ WebRTC disconnected");
           setConnectionState("connecting");
         }
       };
 
       pc.oniceconnectionstatechange = () => {
         if (!isMountedRef.current) return;
-        console.log(`[VoiceCall] 🧊 ICE state: ${pc.iceConnectionState}`);
+        console.log(`[VoiceCall] ðŸ§Š ICE state: ${pc.iceConnectionState}`);
       };
 
       // 6 - Create offer and send
-      console.log("[VoiceCall] 📤 Creating WebRTC offer...");
+      console.log("[VoiceCall] ðŸ“¤ Creating WebRTC offer...");
       const offer = await pc.createOffer({ offerToReceiveAudio: true });
       
       console.log(`[VoiceCall]    Offer created - type: ${offer.type}`);
       console.log(`[VoiceCall]    SDP length: ${offer.sdp.length} characters`);
       
       await pc.setLocalDescription(offer);
-      console.log("[VoiceCall] ✅ Local description set (offer)");
+      console.log("[VoiceCall] âœ… Local description set (offer)");
 
       // Log all senders (tracks being sent)
       const senders = pc.getSenders();
-      console.log(`[VoiceCall] 📊 Active senders count: ${senders.length}`);
+      console.log(`[VoiceCall] ðŸ“Š Active senders count: ${senders.length}`);
       senders.forEach((sender, index) => {
         if (sender.track) {
           console.log(`[VoiceCall]    Sender ${index}: ${sender.track.kind} track | enabled: ${sender.track.enabled} | readyState: ${sender.track.readyState}`);
         }
       });
 
-      console.log("[VoiceCall] 📤 SENDING WebRTC Offer to server");
+      console.log("[VoiceCall] ðŸ“¤ SENDING WebRTC Offer to server");
       console.log(`[VoiceCall]    Offer SDP preview: ${offer.sdp.substring(0, 100)}...`);
       
       wsSend({
@@ -407,7 +511,7 @@ export default function useVoiceCall(projectId) {
         sdp: { type: offer.type, sdp: offer.sdp },
       });
     } catch (error) {
-      console.error("[VoiceCall] ❌ WebRTC init error:", error.message);
+      console.error("[VoiceCall] âŒ WebRTC init error:", error.message);
       console.error("[VoiceCall]    Error stack:", error.stack);
       setConnectionState("failed");
       setConnectionError(error.message || "Microphone access failed. Please allow mic permission and retry.");
@@ -430,19 +534,19 @@ export default function useVoiceCall(projectId) {
       switch (data.type) {
         // -- Successfully joined a room --
         case "joined": {
-          console.log("[VoiceCall] ✅ Successfully joined voice room");
+          console.log("[VoiceCall] âœ… Successfully joined voice room");
           console.log(`[VoiceCall]    Room ID: ${data.roomId}`);
           console.log(`[VoiceCall]    User ID: ${data.userId}`);
           console.log(`[VoiceCall]    Users in room: ${data.users ? data.users.length : 0}`);
           
           // Log detailed user list from server
           if (data.users && Array.isArray(data.users)) {
-            console.log(`[VoiceCall] 👥 SERVER SAYS ${data.users.length} users in room:`);
+            console.log(`[VoiceCall] ðŸ‘¥ SERVER SAYS ${data.users.length} users in room:`);
             data.users.forEach((u, i) => {
               console.log(`[VoiceCall]    ${i + 1}. ${u.userId?.substring(0, 20)}... | muted: ${u.isMuted}`);
             });
             if (data.users.length > 3) {
-              console.warn(`[VoiceCall] ⚠️ WARNING: ${data.users.length} users detected! This may be stale data from server.`);
+              console.warn(`[VoiceCall] âš ï¸ WARNING: ${data.users.length} users detected! This may be stale data from server.`);
             }
           }
           
@@ -458,19 +562,9 @@ export default function useVoiceCall(projectId) {
 
           // Update participants immediately from server response
           if (data.users && Array.isArray(data.users)) {
-            console.log("[VoiceCall] 📋 Updating participants from server:", data.users.map(u => u.userId?.substring(0, 16)));
+            console.log("[VoiceCall] ðŸ“‹ Updating participants from server:", data.users.map(u => u.userId?.substring(0, 16)));
             setParticipants((prev) => {
-              const newParticipants = data.users.map(u => {
-                // Find existing participant to preserve username/avatar
-                const existing = prev.find(p => p.user_id === u.userId);
-                return {
-                  user_id: u.userId,
-                  username: existing?.username || u.username || u.userId,
-                  avatar_url: existing?.avatar_url || u.avatar_url || null,
-                  isMuted: u.isMuted ?? false,
-                  isSpeaking: existing?.isSpeaking ?? false,
-                };
-              });
+              const newParticipants = mapServerParticipants(data.users, prev);
               return deduplicateParticipants(newParticipants);
             });
           }
@@ -479,17 +573,17 @@ export default function useVoiceCall(projectId) {
           updateVoicePresence(false);
 
           // Start WebRTC handshake
-          console.log("[VoiceCall] 🎯 Starting WebRTC initialization...");
+          console.log("[VoiceCall] ðŸŽ¯ Starting WebRTC initialization...");
           await initWebRTC();
           break;
         }
 
         // -- SFU answer to our offer --
         case "answer": {
-          console.log("[VoiceCall] 📥 Received WebRTC answer from server");
+          console.log("[VoiceCall] ðŸ“¥ Received WebRTC answer from server");
           const pc = pcRef.current;
           if (!pc) {
-            console.error("[VoiceCall] ❌ ERROR: peerConnection is null, cannot handle answer");
+            console.error("[VoiceCall] âŒ ERROR: peerConnection is null, cannot handle answer");
             break;
           }
           
@@ -499,17 +593,17 @@ export default function useVoiceCall(projectId) {
           
           try {
             await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-            console.log("[VoiceCall] ✅ Remote description set (answer)");
+            console.log("[VoiceCall] âœ… Remote description set (answer)");
             
             // Process any pending ICE candidates
             if (pendingIceCandidatesRef.current.length > 0) {
-              console.log(`[VoiceCall] 📦 Processing ${pendingIceCandidatesRef.current.length} pending ICE candidates`);
+              console.log(`[VoiceCall] ðŸ“¦ Processing ${pendingIceCandidatesRef.current.length} pending ICE candidates`);
               for (const candidate of pendingIceCandidatesRef.current) {
                 try {
                   await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                  console.log("[VoiceCall] ✅ Pending ICE candidate added");
+                  console.log("[VoiceCall] âœ… Pending ICE candidate added");
                 } catch (err) {
-                  console.error("[VoiceCall] ❌ Error adding pending ICE candidate:", err.message);
+                  console.error("[VoiceCall] âŒ Error adding pending ICE candidate:", err.message);
                 }
               }
               pendingIceCandidatesRef.current = [];
@@ -517,14 +611,14 @@ export default function useVoiceCall(projectId) {
             
             // Log receivers (tracks we're receiving)
             const receivers = pc.getReceivers();
-            console.log(`[VoiceCall] 📊 Active receivers count: ${receivers.length}`);
+            console.log(`[VoiceCall] ðŸ“Š Active receivers count: ${receivers.length}`);
             receivers.forEach((receiver, index) => {
               if (receiver.track) {
                 console.log(`[VoiceCall]    Receiver ${index}: ${receiver.track.kind} track | enabled: ${receiver.track.enabled} | readyState: ${receiver.track.readyState}`);
               }
             });
           } catch (err) {
-            console.error("[VoiceCall] ❌ setRemoteDescription (answer) error:", err.message);
+            console.error("[VoiceCall] âŒ setRemoteDescription (answer) error:", err.message);
             console.error("[VoiceCall]    Error stack:", err.stack);
           }
           break;
@@ -532,10 +626,10 @@ export default function useVoiceCall(projectId) {
 
         // -- Renegotiation offer from SFU (new peer joined) --
         case "offer": {
-          console.log("[VoiceCall] 🔄 Received renegotiation OFFER from server");
+          console.log("[VoiceCall] ðŸ”„ Received renegotiation OFFER from server");
           const pc = pcRef.current;
           if (!pc) {
-            console.error("[VoiceCall] ❌ ERROR: peerConnection is null, cannot handle renegotiation offer");
+            console.error("[VoiceCall] âŒ ERROR: peerConnection is null, cannot handle renegotiation offer");
             break;
           }
           
@@ -548,23 +642,23 @@ export default function useVoiceCall(projectId) {
             
             // Handle glare (we also have a pending local offer)
             if (sigState === "have-local-offer" || sigState === "have-remote-offer") {
-              console.warn(`[VoiceCall] ⚠️ Glare detected! Rolling back to stable state from ${sigState}`);
+              console.warn(`[VoiceCall] âš ï¸ Glare detected! Rolling back to stable state from ${sigState}`);
               await pc.setLocalDescription({ type: "rollback" });
-              console.log("[VoiceCall] ✅ Rolled back to stable state");
+              console.log("[VoiceCall] âœ… Rolled back to stable state");
             }
             
             await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-            console.log("[VoiceCall] ✅ Remote description set (renegotiation offer)");
+            console.log("[VoiceCall] âœ… Remote description set (renegotiation offer)");
 
             // Process any pending ICE candidates
             if (pendingIceCandidatesRef.current.length > 0) {
-              console.log(`[VoiceCall] 📦 Processing ${pendingIceCandidatesRef.current.length} pending ICE candidates`);
+              console.log(`[VoiceCall] ðŸ“¦ Processing ${pendingIceCandidatesRef.current.length} pending ICE candidates`);
               for (const candidate of pendingIceCandidatesRef.current) {
                 try {
                   await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                  console.log("[VoiceCall] ✅ Pending ICE candidate added");
+                  console.log("[VoiceCall] âœ… Pending ICE candidate added");
                 } catch (err) {
-                  console.error("[VoiceCall] ❌ Error adding pending ICE candidate:", err.message);
+                  console.error("[VoiceCall] âŒ Error adding pending ICE candidate:", err.message);
                 }
               }
               pendingIceCandidatesRef.current = [];
@@ -572,27 +666,27 @@ export default function useVoiceCall(projectId) {
 
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
-            console.log("[VoiceCall] ✅ Created and set local description (renegotiation answer)");
+            console.log("[VoiceCall] âœ… Created and set local description (renegotiation answer)");
 
-            console.log(`[VoiceCall] � Sending renegotiation answer to server - userId: ${currentUserIdRef.current}, roomId: ${roomIdRef.current}`);
+            console.log(`[VoiceCall] ï¿½ Sending renegotiation answer to server - userId: ${currentUserIdRef.current}, roomId: ${roomIdRef.current}`);
             wsSend({
               action: "answer",
               roomId: roomIdRef.current,
               userId: currentUserIdRef.current,
               sdp: { type: answer.type, sdp: answer.sdp },
             });
-            console.log("[VoiceCall] ✅ Answer sent successfully");
+            console.log("[VoiceCall] âœ… Answer sent successfully");
             
             // Log receivers (tracks we're receiving)
             const receivers = pc.getReceivers();
-            console.log(`[VoiceCall] � Active receivers count after renegotiation: ${receivers.length}`);
+            console.log(`[VoiceCall] ï¿½ Active receivers count after renegotiation: ${receivers.length}`);
             receivers.forEach((receiver, index) => {
               if (receiver.track) {
                 console.log(`[VoiceCall]    Receiver ${index}: ${receiver.track.kind} track | enabled: ${receiver.track.enabled} | readyState: ${receiver.track.readyState}`);
               }
             });
           } catch (err) {
-            console.error("[VoiceCall] ❌ renegotiation error:", err.message);
+            console.error("[VoiceCall] âŒ renegotiation error:", err.message);
             console.error("[VoiceCall]    Error stack:", err.stack);
           }
           break;
@@ -600,30 +694,30 @@ export default function useVoiceCall(projectId) {
 
         // -- ICE candidate from SFU --
         case "ice_candidate": {
-          console.log("[VoiceCall] 🧊 Received ICE candidate from server");
+          console.log("[VoiceCall] ðŸ§Š Received ICE candidate from server");
           const pc = pcRef.current;
           if (pc && data.candidate) {
             try {
               // Check if remote description is set
               if (!pc.remoteDescription) {
-                console.log("[VoiceCall] ⏳ Remote description not set yet, queuing ICE candidate");
+                console.log("[VoiceCall] â³ Remote description not set yet, queuing ICE candidate");
                 pendingIceCandidatesRef.current.push(data.candidate);
               } else {
                 await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-                console.log("[VoiceCall] ✅ ICE candidate added");
+                console.log("[VoiceCall] âœ… ICE candidate added");
               }
             } catch (err) {
-              console.error("[VoiceCall] ❌ addIceCandidate error:", err.message);
+              console.error("[VoiceCall] âŒ addIceCandidate error:", err.message);
             }
           } else {
-            console.warn("[VoiceCall] ⚠️ Cannot add ICE candidate - peerConnection or candidate is null");
+            console.warn("[VoiceCall] âš ï¸ Cannot add ICE candidate - peerConnection or candidate is null");
           }
           break;
         }
 
         // -- Left the room --
         case "left": {
-          console.log("[VoiceCall] 👋 Left the voice room");
+          console.log("[VoiceCall] ðŸ‘‹ Left the voice room");
           setIsUserInCall(false);
           isUserInCallRef.current = false;
           setIsMuted(false);
@@ -650,18 +744,9 @@ export default function useVoiceCall(projectId) {
           }
           // Update participants list with new mute status
           if (data.users && Array.isArray(data.users)) {
-            console.log("[VoiceCall] 📋 Updating participants from muted:", data.users.map(u => u.userId));
+            console.log("[VoiceCall] ðŸ“‹ Updating participants from muted:", data.users.map(u => u.userId));
             setParticipants((prev) => {
-              const newParticipants = data.users.map(u => {
-                const existing = prev.find(p => p.user_id === u.userId);
-                return {
-                  user_id: u.userId,
-                  username: existing?.username || u.username || u.userId,
-                  avatar_url: existing?.avatar_url || u.avatar_url || null,
-                  isMuted: u.isMuted ?? false,
-                  isSpeaking: existing?.isSpeaking ?? false,
-                };
-              });
+              const newParticipants = mapServerParticipants(data.users, prev);
               return deduplicateParticipants(newParticipants);
             });
           }
@@ -678,18 +763,9 @@ export default function useVoiceCall(projectId) {
           }
           // Update participants list with new mute status
           if (data.users && Array.isArray(data.users)) {
-            console.log("[VoiceCall] 📋 Updating participants from unmuted:", data.users.map(u => u.userId));
+            console.log("[VoiceCall] ðŸ“‹ Updating participants from unmuted:", data.users.map(u => u.userId));
             setParticipants((prev) => {
-              const newParticipants = data.users.map(u => {
-                const existing = prev.find(p => p.user_id === u.userId);
-                return {
-                  user_id: u.userId,
-                  username: existing?.username || u.username || u.userId,
-                  avatar_url: existing?.avatar_url || u.avatar_url || null,
-                  isMuted: u.isMuted ?? false,
-                  isSpeaking: existing?.isSpeaking ?? false,
-                };
-              });
+              const newParticipants = mapServerParticipants(data.users, prev);
               return deduplicateParticipants(newParticipants);
             });
           }
@@ -699,20 +775,11 @@ export default function useVoiceCall(projectId) {
 
         // -- Room broadcasts (update participants immediately) --
         case "user_joined": {
-          console.log(`[VoiceCall] 👤 User joined: ${data.userId}`);
+          console.log(`[VoiceCall] ðŸ‘¤ User joined: ${data.userId}`);
           if (data.users && Array.isArray(data.users)) {
-            console.log("[VoiceCall] 📋 Updating participants from user_joined:", data.users.map(u => u.userId));
+            console.log("[VoiceCall] ðŸ“‹ Updating participants from user_joined:", data.users.map(u => u.userId));
             setParticipants((prev) => {
-              const newParticipants = data.users.map(u => {
-                const existing = prev.find(p => p.user_id === u.userId);
-                return {
-                  user_id: u.userId,
-                  username: existing?.username || u.username || u.userId,
-                  avatar_url: existing?.avatar_url || u.avatar_url || null,
-                  isMuted: u.isMuted ?? false,
-                  isSpeaking: existing?.isSpeaking ?? false,
-                };
-              });
+              const newParticipants = mapServerParticipants(data.users, prev);
               return deduplicateParticipants(newParticipants);
             });
           }
@@ -720,20 +787,11 @@ export default function useVoiceCall(projectId) {
         }
 
         case "user_left": {
-          console.log(`[VoiceCall] 👋 User left: ${data.userId}`);
+          console.log(`[VoiceCall] ðŸ‘‹ User left: ${data.userId}`);
           if (data.users && Array.isArray(data.users)) {
-            console.log("[VoiceCall] 📋 Updating participants from user_left:", data.users.map(u => u.userId));
+            console.log("[VoiceCall] ðŸ“‹ Updating participants from user_left:", data.users.map(u => u.userId));
             setParticipants((prev) => {
-              const newParticipants = data.users.map(u => {
-                const existing = prev.find(p => p.user_id === u.userId);
-                return {
-                  user_id: u.userId,
-                  username: existing?.username || u.username || u.userId,
-                  avatar_url: existing?.avatar_url || u.avatar_url || null,
-                  isMuted: u.isMuted ?? false,
-                  isSpeaking: existing?.isSpeaking ?? false,
-                };
-              });
+              const newParticipants = mapServerParticipants(data.users, prev);
               return deduplicateParticipants(newParticipants);
             });
           }
@@ -741,20 +799,11 @@ export default function useVoiceCall(projectId) {
         }
 
         case "user_muted": {
-          console.log(`[VoiceCall] 🔇 User mute status changed: ${data.userId}`);
+          console.log(`[VoiceCall] ðŸ”‡ User mute status changed: ${data.userId}`);
           if (data.users && Array.isArray(data.users)) {
-            console.log("[VoiceCall] 📋 Updating participants from user_muted:", data.users.map(u => u.userId));
+            console.log("[VoiceCall] ðŸ“‹ Updating participants from user_muted:", data.users.map(u => u.userId));
             setParticipants((prev) => {
-              const newParticipants = data.users.map(u => {
-                const existing = prev.find(p => p.user_id === u.userId);
-                return {
-                  user_id: u.userId,
-                  username: existing?.username || u.username || u.userId,
-                  avatar_url: existing?.avatar_url || u.avatar_url || null,
-                  isMuted: u.isMuted ?? false,
-                  isSpeaking: existing?.isSpeaking ?? false,
-                };
-              });
+              const newParticipants = mapServerParticipants(data.users, prev);
               return deduplicateParticipants(newParticipants);
             });
           }
@@ -762,20 +811,11 @@ export default function useVoiceCall(projectId) {
         }
 
         case "user_unmuted": {
-          console.log(`[VoiceCall] 🔊 User unmute status changed: ${data.userId}`);
+          console.log(`[VoiceCall] ðŸ”Š User unmute status changed: ${data.userId}`);
           if (data.users && Array.isArray(data.users)) {
-            console.log("[VoiceCall] 📋 Updating participants from user_unmuted:", data.users.map(u => u.userId));
+            console.log("[VoiceCall] ðŸ“‹ Updating participants from user_unmuted:", data.users.map(u => u.userId));
             setParticipants((prev) => {
-              const newParticipants = data.users.map(u => {
-                const existing = prev.find(p => p.user_id === u.userId);
-                return {
-                  user_id: u.userId,
-                  username: existing?.username || u.username || u.userId,
-                  avatar_url: existing?.avatar_url || u.avatar_url || null,
-                  isMuted: u.isMuted ?? false,
-                  isSpeaking: existing?.isSpeaking ?? false,
-                };
-              });
+              const newParticipants = mapServerParticipants(data.users, prev);
               return deduplicateParticipants(newParticipants);
             });
           }
@@ -796,7 +836,7 @@ export default function useVoiceCall(projectId) {
           break;
       }
     },
-    [initWebRTC, closeWebRTC, wsSend, updateVoicePresence, removeVoicePresence, deduplicateParticipants]
+    [initWebRTC, closeWebRTC, wsSend, updateVoicePresence, removeVoicePresence, deduplicateParticipants, mapServerParticipants]
   );
 
   // Keep the ref in sync with the latest handler
@@ -813,7 +853,7 @@ export default function useVoiceCall(projectId) {
       return;
     }
 
-    console.log("[VoiceCall] 🔗 Connecting WebSocket...");
+    console.log("[VoiceCall] ðŸ”— Connecting WebSocket...");
     setConnectionState("connecting");
     setConnectionError("");
 
@@ -830,7 +870,7 @@ export default function useVoiceCall(projectId) {
 
     const wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL;
     if (!wsUrl) {
-      console.error("[VoiceCall] ❌ NEXT_PUBLIC_WEBSOCKET_URL not set");
+      console.error("[VoiceCall] âŒ NEXT_PUBLIC_WEBSOCKET_URL not set");
       setConnectionState("failed");
       setConnectionError("Voice server is not configured. Contact support.");
       return;
@@ -844,14 +884,14 @@ export default function useVoiceCall(projectId) {
 
     ws.onopen = () => {
       if (!isMountedRef.current) return;
-      console.log("[VoiceCall] ✅ WebSocket connected successfully!");
+      console.log("[VoiceCall] âœ… WebSocket connected successfully!");
       setIsConnected(true);
       setConnectionState("connected");
     };
 
     // Delegate to the latest message handler ref
     ws.onmessage = (event) => {
-      console.log(`[VoiceCall] 📥 RECEIVED WebSocket message:`, event.data);
+      console.log(`[VoiceCall] ðŸ“¥ RECEIVED WebSocket message:`, event.data);
       if (handleWsMessageRef.current) {
         handleWsMessageRef.current(event);
       }
@@ -859,14 +899,14 @@ export default function useVoiceCall(projectId) {
 
     ws.onerror = (error) => {
       if (!isMountedRef.current) return;
-      console.error("[VoiceCall] ❌ WebSocket error:", error);
+      console.error("[VoiceCall] âŒ WebSocket error:", error);
       setConnectionState("failed");
       setConnectionError("Unable to connect to voice server. Check network and try again.");
     };
 
     ws.onclose = (event) => {
       if (!isMountedRef.current) return;
-      console.log(`[VoiceCall] 🔌 WebSocket closed (code: ${event.code}, reason: ${event.reason || 'none'})`);
+      console.log(`[VoiceCall] ðŸ”Œ WebSocket closed (code: ${event.code}, reason: ${event.reason || 'none'})`);
       wsRef.current = null;
       setIsConnected(false);
       setIsUserInCall(false);
@@ -886,11 +926,11 @@ export default function useVoiceCall(projectId) {
   /** Join the voice room (connects WS if needed, then sends join) */
   const joinCall = useCallback(async () => {
     if (!roomId) {
-      console.error("[VoiceCall] ❌ Cannot join call - no roomId");
+      console.error("[VoiceCall] âŒ Cannot join call - no roomId");
       return;
     }
     
-    console.log(`[VoiceCall] 🚀 Attempting to join voice room: ${roomId}`);
+    console.log(`[VoiceCall] ðŸš€ Attempting to join voice room: ${roomId}`);
     roomIdRef.current = roomId;
 
     try {
@@ -904,7 +944,7 @@ export default function useVoiceCall(projectId) {
         await new Promise((resolve, reject) => {
           const ws = wsRef.current;
           if (!ws) {
-            console.error("[VoiceCall] ❌ No WebSocket instance");
+            console.error("[VoiceCall] âŒ No WebSocket instance");
             return reject(new Error("No WebSocket"));
           }
           if (ws.readyState === WebSocket.OPEN) {
@@ -914,14 +954,14 @@ export default function useVoiceCall(projectId) {
 
           console.log("[VoiceCall] Waiting for WebSocket to open...");
           const timeout = setTimeout(() => {
-            console.error("[VoiceCall] ❌ WebSocket open timeout (8s)");
+            console.error("[VoiceCall] âŒ WebSocket open timeout (8s)");
             reject(new Error("WS open timeout"));
           }, 8000);
 
           const origOnOpen = ws.onopen;
           ws.onopen = (e) => {
             clearTimeout(timeout);
-            console.log("[VoiceCall] ✅ WebSocket opened");
+            console.log("[VoiceCall] âœ… WebSocket opened");
             if (origOnOpen) origOnOpen(e);
             resolve();
           };
@@ -929,7 +969,7 @@ export default function useVoiceCall(projectId) {
           const origOnError = ws.onerror;
           ws.onerror = (e) => {
             clearTimeout(timeout);
-            console.error("[VoiceCall] ❌ WebSocket error during connection");
+            console.error("[VoiceCall] âŒ WebSocket error during connection");
             if (origOnError) origOnError(e);
             reject(new Error("WS error"));
           };
@@ -940,7 +980,7 @@ export default function useVoiceCall(projectId) {
       console.log(`[VoiceCall] Sending join message for room: ${roomId}`);
       wsSend({ action: "join", roomId });
     } catch (error) {
-      console.error("[VoiceCall] ❌ joinCall error:", error.message);
+      console.error("[VoiceCall] âŒ joinCall error:", error.message);
       console.error("[VoiceCall]    Error stack:", error.stack);
       setConnectionState("failed");
       setConnectionError("Could not join voice room. Check your connection and microphone permission.");
@@ -956,7 +996,7 @@ export default function useVoiceCall(projectId) {
 
   /** Leave the voice room */
   const leaveCall = useCallback(() => {
-    console.log("[VoiceCall] 🚪 Leaving voice call...");
+    console.log("[VoiceCall] ðŸšª Leaving voice call...");
     
     if (roomIdRef.current) {
       wsSend({ action: "leave", roomId: roomIdRef.current });
@@ -1016,7 +1056,7 @@ export default function useVoiceCall(projectId) {
         isMuted: p.isMuted
       }))
     };
-    console.log("[VoiceCall] 📊 Room Info:", info);
+    console.log("[VoiceCall] ðŸ“Š Room Info:", info);
     return info;
   }, [projectId, roomId, participants]);
 
@@ -1029,60 +1069,41 @@ export default function useVoiceCall(projectId) {
     realtimeServiceRef.current = rs;
 
     // Subscribe to voice presence - ALL users get notified who is in the call
-    const unsub = rs.subscribeToVoicePresence(
-      projectId,
-      user.id,
-      (voiceUsers) => {
+    const unsub = rs.subscribeToVoicePresence(projectId, user.id, {
+      onSync: (voiceUsers) => {
         if (!isMountedRef.current) return;
-
-        // Filter out mock users and stale presence
-        const validUsers = voiceUsers.filter((u) => {
-          if (!u.user_id) return false;
-          // Filter out mock users
-          if (u.user_id?.startsWith('mock-user-')) {
-            console.log('[VoiceCall] 🚫 Filtering out mock user:', u.user_id);
-            return false;
-          }
-          return true;
+        // Rebuild the full presence cache so mapServerParticipants can resolve
+        // real usernames even when WS `joined` fired before this sync arrived.
+        voicePresenceCacheRef.current = normalizePresenceParticipants(voiceUsers);
+        setParticipants((prev) => mergePresenceParticipants(prev, voiceUsers));
+      },
+      onJoin: (joinedUsers) => {
+        if (!isMountedRef.current) return;
+        // Upsert incoming entries into the presence cache.
+        const incoming = normalizePresenceParticipants(joinedUsers);
+        incoming.forEach((nu) => {
+          const idx = voicePresenceCacheRef.current.findIndex((p) => p.user_id === nu.user_id);
+          if (idx >= 0) voicePresenceCacheRef.current[idx] = nu;
+          else voicePresenceCacheRef.current.push(nu);
         });
-
-        setParticipants((prev) => {
-          // When in call: WebSocket is source of truth for WHO is in call
-          // Presence only enriches with username/avatar
-          if (isUserInCallRef.current) {
-            console.log("[VoiceCall] 📋 Enriching WebSocket participants with presence data");
-            return prev.map((p) => {
-              const presenceUser = validUsers.find((u) => u.user_id === p.user_id);
-              if (presenceUser) {
-                return {
-                  ...p,
-                  username: presenceUser.username || p.username,
-                  avatar_url: presenceUser.avatar_url || p.avatar_url,
-                  // Keep WebSocket's isMuted and isSpeaking
-                };
-              }
-              return p;
-            });
-          }
-
-          // When NOT in call: Presence is source of truth (State 2 - seeing others)
-          console.log("[VoiceCall] 📋 Using presence data (not in call)");
-          const mappedPresence = validUsers.map((u) => ({
-            user_id: u.user_id,
-            username: u.username || u.user_id,
-            avatar_url: u.avatar_url || null,
-            isSpeaking: false,
-            isMuted: u.isMuted ?? false,
-          }));
-          return deduplicateParticipants(mappedPresence);
-        });
-      }
-    );
+        setParticipants((prev) => upsertPresenceParticipants(prev, joinedUsers));
+      },
+      onLeave: (leftUsers, leftUserId) => {
+        if (!isMountedRef.current) return;
+        // Remove leaving entries from the presence cache.
+        const leavingIds = new Set(leftUsers.map((u) => u?.user_id).filter(Boolean));
+        if (leftUserId) leavingIds.add(leftUserId);
+        voicePresenceCacheRef.current = voicePresenceCacheRef.current.filter(
+          (p) => !leavingIds.has(p.user_id)
+        );
+        setParticipants((prev) => removePresenceParticipants(prev, leftUsers, leftUserId));
+      },
+    });
 
     return () => {
       if (unsub) unsub();
     };
-  }, [projectId, user.id, deduplicateParticipants]);
+  }, [projectId, user.id, normalizePresenceParticipants, mergePresenceParticipants, upsertPresenceParticipants, removePresenceParticipants]);
 
   // --- Lifecycle ---
 
@@ -1091,7 +1112,7 @@ export default function useVoiceCall(projectId) {
 
     // Cleanup on page refresh/close
     const handleBeforeUnload = () => {
-      console.log('[VoiceCall] 🔄 Page unloading - cleaning up');
+      console.log('[VoiceCall] ðŸ”„ Page unloading - cleaning up');
       
       // Leave call if in one
       if (isUserInCallRef.current && roomIdRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
@@ -1132,8 +1153,9 @@ export default function useVoiceCall(projectId) {
       // Untrack voice presence on unmount
       if (realtimeServiceRef.current && projectId) {
         realtimeServiceRef.current.untrackVoicePresence(projectId).catch(() => {});
-      }
-    };
+
+        }
+      };
   }, [closeWebRTC, projectId]);
 
   // --- Return ---
