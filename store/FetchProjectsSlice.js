@@ -66,7 +66,7 @@ const FetchProjectsSlice = createSlice({
       .addCase(FetchAllProjects.fulfilled, (state, action) => {
         state.status = "succeeded";
         state.projects = action.payload;
-        state.joined = action.payload.filter((p) => p.role === "collaborator");
+        state.joined = action.payload.filter((p) => p.role !== "owner");
         state.created = action.payload.filter((p) => p.role === "owner");
       })
       .addCase(FetchAllProjects.rejected, (state, action) => {

@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { ensureProjectAccess, normalizeMemberRole } from "@/lib/projectAccess";
 
 export async function GET(req, { params: paramsPromise }) {
   try {
     const { id } = await paramsPromise;
-    const supabase = await createClient();
+    const supabase = await createClient(req);
+    const admin = createAdminClient();
 
     if (!id) {
       return NextResponse.json(
@@ -13,49 +16,21 @@ export async function GET(req, { params: paramsPromise }) {
       );
     }
 
-    // First check if project exists and get its visibility
-    const { data: project, error: projectError } = await supabase
-      .from("projects")
-      .select("id, visibility")
-      .eq("id", id)
-      .single();
-
-    if (projectError || !project) {
-      return NextResponse.json(
-        { error: "Project not found" },
-        { status: 404 }
-      );
-    }
-
-    // Get current user (optional - can be null for public projects)
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    // Check if user has permission to view members
-    let canViewMembers = project.visibility === "public";
+    const access = await ensureProjectAccess({
+      projectId: id,
+      userId: user?.id || null,
+      requireView: true,
+    });
 
-    if (!canViewMembers && user) {
-      // Check if user is owner or collaborator
-      const { data: membership } = await supabase
-        .from("project_members")
-        .select("role")
-        .eq("project_id", id)
-        .eq("user_id", user.id)
-        .single();
-
-      canViewMembers = !!membership;
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
-    if (!canViewMembers) {
-      return NextResponse.json(
-        { error: "You don't have permission to view members of this project" },
-        { status: 403 }
-      );
-    }
-
-    // Fetch all members for the project with user details
-    const { data: members, error: membersError } = await supabase
+    const { data: members, error: membersError } = await admin
       .from("project_members")
       .select(
         `
@@ -81,32 +56,32 @@ export async function GET(req, { params: paramsPromise }) {
       );
     }
 
-    // Structure members by role
     let owner = null;
-    const collaborators = [];
+    const membersList = [];
 
     members?.forEach((member) => {
-      if (!member.users) return; // Skip if user data is missing
+      if (!member.users) return;
 
+      const normalizedRole = normalizeMemberRole(member.role);
       const userData = {
         user_id: member.user_id,
         username: member.users.username || "Unknown User",
         email: member.users.email || "",
         avatar_url: member.users.avatar_url || null,
-        role: member.role,
+        role: normalizedRole,
         joined_at: member.joined_at,
       };
 
-      if (member.role === "owner") {
+      if (normalizedRole === "owner") {
         owner = userData;
-      } else if (member.role === "collaborator") {
-        collaborators.push(userData);
+      } else {
+        membersList.push(userData);
       }
     });
 
     return NextResponse.json({
       owner,
-      collaborators,
+      members: membersList,
       total: members?.length || 0,
     });
   } catch (err) {
@@ -121,9 +96,10 @@ export async function GET(req, { params: paramsPromise }) {
 export async function DELETE(req, { params: paramsPromise }) {
   try {
     const { id } = await paramsPromise;
-    const supabase = await createClient();
+    const supabase = await createClient(req);
+    const admin = createAdminClient();
     const { searchParams } = new URL(req.url);
-    const userIdToRemove = searchParams.get('userId');
+    const userIdToRemove = searchParams.get("userId");
 
     if (!id || !userIdToRemove) {
       return NextResponse.json(
@@ -132,50 +108,50 @@ export async function DELETE(req, { params: paramsPromise }) {
       );
     }
 
-    // Get current user
     const {
       data: { user },
+      error: userError,
     } = await supabase.auth.getUser();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json(
         { error: "You must be logged in" },
         { status: 401 }
       );
     }
 
-    // Check if current user is the owner
-    const { data: currentUserRole } = await supabase
-      .from("project_members")
-      .select("role")
-      .eq("project_id", id)
-      .eq("user_id", user.id)
-      .single();
+    const access = await ensureProjectAccess({
+      projectId: id,
+      userId: user.id,
+      requireView: true,
+    });
 
-    if (!currentUserRole || currentUserRole.role !== "owner") {
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+
+    if (!access.context.permissions.isOwner) {
       return NextResponse.json(
-        { error: "Only the project owner can remove collaborators" },
+        { error: "Only the project owner can remove members" },
         { status: 403 }
       );
     }
 
-    // Check if the user to remove is not the owner
-    const { data: userToRemoveRole } = await supabase
+    const { data: userToRemoveRole } = await admin
       .from("project_members")
       .select("role")
       .eq("project_id", id)
       .eq("user_id", userIdToRemove)
-      .single();
+      .maybeSingle();
 
-    if (userToRemoveRole?.role === "owner") {
+    if (normalizeMemberRole(userToRemoveRole?.role) === "owner") {
       return NextResponse.json(
         { error: "Cannot remove the project owner" },
         { status: 400 }
       );
     }
 
-    // Remove the collaborator
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await admin
       .from("project_members")
       .delete()
       .eq("project_id", id)
@@ -191,10 +167,10 @@ export async function DELETE(req, { params: paramsPromise }) {
 
     return NextResponse.json({
       success: true,
-      message: "Collaborator removed successfully",
+      message: "Member removed successfully",
     });
   } catch (err) {
-    console.error("Error removing collaborator:", err);
+    console.error("Error removing member:", err);
     return NextResponse.json(
       { error: err.message || "Internal Server Error" },
       { status: 500 }

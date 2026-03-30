@@ -1,23 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { X, Copy, Check, Globe, Lock, ChevronDown, Link2, Menu, EllipsisVertical, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { X, Copy, Check, Globe, Lock, ChevronDown, Link2, EllipsisVertical, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSelector, useDispatch } from "react-redux";
 import { toast } from "sonner";
 import { updateProjectVisibility } from "@/store/ProjectSlice";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import DeleteModal from "@/components/ui/DeleteModal";
 
 export default function SharePanel({ isOpen, onClose }) {
   const dispatch = useDispatch();
   const params = useParams();
+  const searchParams = useSearchParams();
   const projectId = params.id;
+  const highlightedRequestId = searchParams.get("requestId");
+  const shouldFocusJoinRequests = searchParams.get("section") === "requests";
 
   const project_code = useSelector((state) => state.project.join_code);
   const owner = useSelector((state) => state.project.owner);
-  const collaborators = useSelector((state) => state.project.collaborators);
+  const members = useSelector((state) => state.project.members);
   const visibility = useSelector((state) => state.project.visibility);
   const permissions = useSelector((state) => state.project.permissions);
   const projectname = useSelector((state) => state.project.projectname);
@@ -30,8 +33,10 @@ export default function SharePanel({ isOpen, onClose }) {
   const [showMemberMenu, setShowMemberMenu] = useState(null); // Store member ID for which menu is open
   const [isRemoving, setIsRemoving] = useState(false);
   const [memberToRemove, setMemberToRemove] = useState(null); // Store member data for delete modal
-
-  if (!isOpen) return null;
+  const [joinRequests, setJoinRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [processingRequestId, setProcessingRequestId] = useState(null);
+  const joinRequestsRef = useRef(null);
 
   const shareUrl =
     typeof window !== "undefined"
@@ -46,6 +51,71 @@ export default function SharePanel({ isOpen, onClose }) {
       setTimeout(() => setCopiedCode(false), 2000);
     } catch (error) {
       toast.error("Failed to copy code");
+    }
+  };
+
+  const fetchJoinRequests = async () => {
+    if (!permissions.isOwner) return;
+
+    setLoadingRequests(true);
+    try {
+      const res = await fetch(`/api/project/${projectId}/join-requests`, {
+        credentials: "same-origin",
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch join requests");
+      }
+
+      setJoinRequests(data.requests || []);
+    } catch (error) {
+      toast.error(error.message || "Failed to fetch join requests");
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && permissions.isOwner) {
+      fetchJoinRequests();
+    }
+  }, [isOpen, permissions.isOwner]);
+
+  useEffect(() => {
+    if (!isOpen || !permissions.isOwner || !shouldFocusJoinRequests) {
+      return;
+    }
+
+    joinRequestsRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, [isOpen, permissions.isOwner, shouldFocusJoinRequests, joinRequests.length]);
+
+  const handleReviewRequest = async (requestId, action, role = "collaborator") => {
+    setProcessingRequestId(requestId);
+    try {
+      const res = await fetch(`/api/project/join-request/${requestId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({ action, role }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to review request");
+      }
+
+      setJoinRequests((prev) => prev.filter((item) => item.id !== requestId));
+      toast.success(action === "approve" ? "Request approved" : "Request rejected");
+    } catch (error) {
+      toast.error(error.message || "Failed to review request");
+    } finally {
+      setProcessingRequestId(null);
     }
   };
 
@@ -99,20 +169,20 @@ export default function SharePanel({ isOpen, onClose }) {
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to remove collaborator");
+        throw new Error(errorData.error || "Failed to remove member");
       }
 
       toast.success(`${memberToRemove.username} removed from project`);
       // Real-time will update the members list automatically
       setMemberToRemove(null);
     } catch (error) {
-      toast.error(error.message || "Failed to remove collaborator");
+      toast.error(error.message || "Failed to remove member");
     } finally {
       setIsRemoving(false);
     }
   };
 
-  // owner + collaborators
+  // owner + members
   const allMembers = [];
   
   if (owner) {
@@ -125,13 +195,13 @@ export default function SharePanel({ isOpen, onClose }) {
     });
   }
 
-  if (collaborators?.length) {
-    collaborators.forEach((collab) => {
+  if (members?.length) {
+    members.forEach((collab) => {
       allMembers.push({
         user_id: collab.user_id,
         username: collab.username,
         email: collab.email,
-        role: "can edit",
+        role: collab.role,
         avatar: collab.username?.[0]?.toUpperCase() || "C",
       });
     });
@@ -151,6 +221,8 @@ export default function SharePanel({ isOpen, onClose }) {
     const index = username?.charCodeAt(0) % colors.length || 0;
     return colors[index];
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -357,7 +429,7 @@ export default function SharePanel({ isOpen, onClose }) {
                       )}
                     </div>
                   ) : (
-                    <span className="text-sm text-gray-400 px-3">can edit</span>
+                    <span className="text-sm text-gray-400 px-3">{member.role}</span>
                   )}
                 </div>
               </div>
@@ -366,6 +438,97 @@ export default function SharePanel({ isOpen, onClose }) {
             {allMembers.length === 0 && (
               <div className="text-center py-8 text-gray-500 text-sm">
                 No members yet
+              </div>
+            )}
+
+            {permissions.isOwner && (
+              <div
+                ref={joinRequestsRef}
+                className={cn(
+                  "mt-6 rounded-xl border border-[#2B2B30] bg-[#17171D] p-4",
+                  shouldFocusJoinRequests && "border-white/30 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+                )}
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">Join Requests</h3>
+                    <p className="text-xs text-gray-400">
+                      Review pending access requests for this project
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-gray-300 hover:bg-[#2B2B30]"
+                    onClick={fetchJoinRequests}
+                  >
+                    Refresh
+                  </Button>
+                </div>
+
+                {loadingRequests ? (
+                  <div className="py-6 text-center text-sm text-gray-400">
+                    Loading requests...
+                  </div>
+                ) : joinRequests.length === 0 ? (
+                  <div className="py-6 text-center text-sm text-gray-500">
+                    No pending requests
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {joinRequests.map((request) => (
+                      <div
+                        key={request.id}
+                        className={cn(
+                          "rounded-lg border border-[#2B2B30] bg-[#1E1E25] p-3 transition-colors",
+                          highlightedRequestId === request.id &&
+                            "border-blue-400/70 bg-blue-500/10"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-white">
+                              {request.requester?.username || "Unknown user"}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              Requested {request.accessType} access
+                            </p>
+                            {request.requester?.email && (
+                              <p className="mt-1 text-xs text-gray-500">
+                                {request.requester.email}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              className="bg-white text-black hover:bg-white/90"
+                              disabled={processingRequestId === request.id}
+                              onClick={() =>
+                                handleReviewRequest(
+                                  request.id,
+                                  "approve",
+                                  request.accessType || "collaborator"
+                                )
+                              }
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="border border-[#3A3A45] text-gray-300 hover:bg-[#2B2B30]"
+                              disabled={processingRequestId === request.id}
+                              onClick={() => handleReviewRequest(request.id, "reject")}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -377,7 +540,7 @@ export default function SharePanel({ isOpen, onClose }) {
         isOpen={!!memberToRemove}
         onClose={() => setMemberToRemove(null)}
         onConfirm={handleConfirmRemove}
-        title="Remove Collaborator"
+        title="Remove Member"
         message={`Are you sure you want to remove ${memberToRemove?.username} from this project? They will lose access to the project immediately.`}
       />
     </div>

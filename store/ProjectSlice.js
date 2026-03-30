@@ -9,14 +9,18 @@ const initialState = {
   join_code: "",
   owner_id: "",
   owner: "",
-  collaborators: [],
+  members: [],
   onlineUsers: [],
   permissions: {
     canEdit: false,
     canView: false,
     isOwner: false,
+    isMember: false,
     isCollaborator: false,
+    isViewer: false,
   },
+  accessRequest: null,
+  accessState: "not_joined",
   status: "idle",
   error: null,
 };
@@ -148,14 +152,18 @@ const projectSlice = createSlice({
       state.join_code = "";
       state.owner_id = "";
       state.owner = "";
-      state.collaborators = [];
+      state.members = [];
       state.onlineUsers = [];
       state.permissions = {
         canEdit: false,
         canView: false,
         isOwner: false,
+        isMember: false,
         isCollaborator: false,
+        isViewer: false,
       };
+      state.accessRequest = null;
+      state.accessState = "not_joined";
       state.status = "idle";
       state.error = null;
     },
@@ -170,20 +178,19 @@ const projectSlice = createSlice({
       if (newMember.role === 'owner') {
         // Update owner if needed (shouldn't happen normally)
         state.owner = newMember;
-      } else if (newMember.role === 'collaborator') {
-        // Check if collaborator already exists
-        const exists = state.collaborators.some(
-          (collab) => collab.user_id === newMember.user_id
+      } else {
+        const exists = state.members.some(
+          (member) => member.user_id === newMember.user_id
         );
         if (!exists) {
-          state.collaborators.push(newMember);
+          state.members.push(newMember);
         }
       }
     },
     handleRemoteMemberDelete: (state, action) => {
       const deletedMember = action.payload;
-      state.collaborators = state.collaborators.filter(
-        (collab) => collab.user_id !== deletedMember.user_id
+      state.members = state.members.filter(
+        (member) => member.user_id !== deletedMember.user_id
       );
     },
     handleRemoteMemberUpdate: (state, action) => {
@@ -191,12 +198,12 @@ const projectSlice = createSlice({
 
       if (updatedMember.role === 'owner') {
         state.owner = updatedMember;
-      } else if (updatedMember.role === 'collaborator') {
-        const index = state.collaborators.findIndex(
-          (collab) => collab.user_id === updatedMember.user_id
+      } else {
+        const index = state.members.findIndex(
+          (member) => member.user_id === updatedMember.user_id
         );
         if (index !== -1) {
-          state.collaborators[index] = updatedMember;
+          state.members[index] = updatedMember;
         }
       }
     },
@@ -219,8 +226,12 @@ const projectSlice = createSlice({
           canEdit: true,
           canView: true,
           isOwner: true,
+          isMember: true,
           isCollaborator: false,
+          isViewer: false,
         };
+        state.accessRequest = null;
+        state.accessState = "member";
         state.error = null;
       })
       .addCase(createProject.rejected, (state, action) => {
@@ -251,6 +262,8 @@ const projectSlice = createSlice({
           state.permissions = permissions;
         }
 
+        state.accessRequest = action.payload.accessRequest || null;
+        state.accessState = action.payload.accessState || "not_joined";
         state.error = null;
       })
       .addCase(fetchProject.rejected, (state, action) => {
@@ -261,8 +274,12 @@ const projectSlice = createSlice({
           canEdit: false,
           canView: false,
           isOwner: false,
+          isMember: false,
           isCollaborator: false,
+          isViewer: false,
         };
+        state.accessRequest = null;
+        state.accessState = "not_joined";
       })
 
       // Fetch project members
@@ -272,7 +289,7 @@ const projectSlice = createSlice({
       .addCase(memberProject.fulfilled, (state, action) => {
         state.status = "succeeded";
         state.owner = action.payload.owner;
-        state.collaborators = action.payload.collaborators;
+        state.members = action.payload.members || [];
       })
       .addCase(memberProject.rejected, (state, action) => {
         state.status = "failed";

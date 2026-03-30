@@ -47,6 +47,7 @@ export default function ProjectWorkspacePage() {
   const permissions = useSelector((state) => state.project.permissions);
   const projectStatus = useSelector((state) => state.project.status);
   const projectError = useSelector((state) => state.project.error);
+  const accessState = useSelector((state) => state.project.accessState);
   const currentUserId = useSelector((state) => state.user.id);
 
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -139,6 +140,8 @@ export default function ProjectWorkspacePage() {
       <AccessDeniedModal
         isOpen={true}
         projectName={projectname || "this project"}
+        projectId={projectId}
+        accessState={accessState}
       />
     );
   }

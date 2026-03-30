@@ -8,9 +8,11 @@ import { Key } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function JoinProjectPage() {
   const [projectCode, setProjectCode] = useState("");
+  const [accessType, setAccessType] = useState("collaborator");
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
@@ -29,12 +31,24 @@ export default function JoinProjectPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ joinCode: projectCode }),
+        body: JSON.stringify({ joinCode: projectCode, accessType }),
+        credentials: "same-origin",
       });
 
       const data = await res.json();
 
       if (!res.ok) {
+        if (data?.state === "member" && data?.projectId) {
+          toast.success("You already have access to this project");
+          router.push(`/project/${data.projectId}`);
+          return;
+        }
+
+        if (data?.state === "pending") {
+          toast.info(data?.error || "Request already sent");
+          return;
+        }
+
         toast.error(data?.error || "Request failed");
         return;
       }
@@ -92,12 +106,27 @@ export default function JoinProjectPage() {
               />
             </div>
 
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-foreground">
+                Requested Access
+              </label>
+              <Select value={accessType} onValueChange={setAccessType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose access" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="collaborator">Collaborator</SelectItem>
+                  <SelectItem value="viewer">Viewer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <Button
               type="submit"
               className="w-full"
               disabled={isLoading || projectCode.length !== 8}
             >
-              {isLoading ? "Joining..." : "Join Project"}
+              {isLoading ? "Submitting..." : "Join Project"}
             </Button>
           </form>
 

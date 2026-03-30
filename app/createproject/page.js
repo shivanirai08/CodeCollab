@@ -159,7 +159,7 @@ export default function CreateProjectPage() {
                   <div className="text-left">
                     <div className="font-medium text-sm">Private</div>
                     <div className="text-xs text-muted-foreground">
-                      Only collaborators
+                      Only approved members
                     </div>
                   </div>
                 </button>
