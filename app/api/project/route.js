@@ -105,7 +105,8 @@ export async function GET(req) {
           id,
           title,
           thumbnail,
-          updated_at
+          updated_at,
+          join_code
         )
       `)
       .eq("user_id", userId);
@@ -181,6 +182,8 @@ export async function GET(req) {
           id: p.id,
           title: p.title || "Untitled Project",
           thumbnail: p.thumbnail || null,
+          joinCode:
+            normalizeMemberRole(m.role) === "viewer" ? null : p.join_code || null,
           lastEditedText: p.updated_at
             ? `Last edited ${new Date(p.updated_at).toLocaleDateString()}`
             : "Never edited",

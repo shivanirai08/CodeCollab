@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { getRealtimeService } from '@/lib/supabase/realtime';
 import {
@@ -22,6 +22,23 @@ export const useRealtimeMembers = (projectId, enabled = false, onUserRemoved) =>
   const unsubscribeRef = useRef(null);
   const currentUserId = useSelector((state) => state.user.id);
 
+  const refreshMembersOrHandleAccessLoss = useCallback(async () => {
+    const result = await dispatch(memberProject(projectId));
+
+    if (memberProject.rejected.match(result)) {
+      const errorText = String(result.payload || result.error?.message || "");
+      const lostAccess =
+        errorText.includes("permission") ||
+        errorText.includes("Unauthorized") ||
+        errorText.includes("Forbidden") ||
+        errorText.includes("not a member");
+
+      if (lostAccess && onUserRemoved) {
+        onUserRemoved();
+      }
+    }
+  }, [dispatch, onUserRemoved, projectId]);
+
   useEffect(() => {
     if (!enabled || !projectId) {
       return;
@@ -41,13 +58,13 @@ export const useRealtimeMembers = (projectId, enabled = false, onUserRemoved) =>
     const unsubscribe = realtimeService.current.subscribeToMembers(projectId, {
       onInsert: async (newMember) => {
         // Fetch full member data including user details
-        await dispatch(memberProject(projectId));
+        await refreshMembersOrHandleAccessLoss();
       },
 
       onDelete: async (deletedMember) => {
         // Validate payload - requires REPLICA IDENTITY FULL on table
         if (!deletedMember || !deletedMember.user_id) {
-          await dispatch(memberProject(projectId));
+          await refreshMembersOrHandleAccessLoss();
           return;
         }
 
@@ -61,12 +78,12 @@ export const useRealtimeMembers = (projectId, enabled = false, onUserRemoved) =>
         }
 
         // For other users being removed, refetch the member list
-        await dispatch(memberProject(projectId));
+        await refreshMembersOrHandleAccessLoss();
       },
 
       onUpdate: async (updatedMember) => {
         // Refetch all members to get updated role data
-        await dispatch(memberProject(projectId));
+        await refreshMembersOrHandleAccessLoss();
       },
     });
 
@@ -79,7 +96,7 @@ export const useRealtimeMembers = (projectId, enabled = false, onUserRemoved) =>
         unsubscribeRef.current = null;
       }
     };
-  }, [projectId, enabled, dispatch, currentUserId, onUserRemoved]);
+  }, [projectId, enabled, dispatch, currentUserId, onUserRemoved, refreshMembersOrHandleAccessLoss]);
 };
 
 export default useRealtimeMembers;

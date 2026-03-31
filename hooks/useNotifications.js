@@ -1,16 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { getRealtimeService } from "@/lib/supabase/realtime";
 
-export default function useNotifications() {
+const NotificationsContext = createContext(null);
+
+function useNotificationsState() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState(null);
   const realtimeRef = useRef(null);
   const unsubscribeRef = useRef(null);
+  const seenNotificationIdsRef = useRef(new Set());
+  const initializedRef = useRef(false);
 
   const recomputeUnreadCount = useCallback((items) => {
     setUnreadCount(items.filter((item) => !item.is_read).length);
@@ -28,8 +40,13 @@ export default function useNotifications() {
 
       const data = await res.json();
       const items = data.notifications || [];
+
       setNotifications(items);
-      setUnreadCount(data.unreadCount ?? items.filter((item) => !item.is_read).length);
+      setUnreadCount(
+        data.unreadCount ?? items.filter((item) => !item.is_read).length
+      );
+      seenNotificationIdsRef.current = new Set(items.map((item) => item.id));
+      initializedRef.current = true;
     } catch (error) {
       console.error("Failed to load notifications:", error);
     } finally {
@@ -55,9 +72,7 @@ export default function useNotifications() {
 
         setNotifications((prev) => {
           const next = prev.map((item) =>
-            item.id === notificationId
-              ? { ...item, is_read: true }
-              : item
+            item.id === notificationId ? { ...item, is_read: true } : item
           );
           recomputeUnreadCount(next);
           return next;
@@ -119,6 +134,18 @@ export default function useNotifications() {
             setNotifications((prev) => {
               const exists = prev.some((item) => item.id === notification.id);
               const next = exists ? prev : [notification, ...prev].slice(0, 20);
+
+              if (
+                initializedRef.current &&
+                !exists &&
+                !seenNotificationIdsRef.current.has(notification.id)
+              ) {
+                toast(notification.title, {
+                  description: notification.message || "You have a new update.",
+                });
+              }
+
+              seenNotificationIdsRef.current.add(notification.id);
               recomputeUnreadCount(next);
               return next;
             });
@@ -156,4 +183,24 @@ export default function useNotifications() {
     markAsRead,
     markAllAsRead,
   };
+}
+
+export function NotificationsProvider({ children }) {
+  const value = useNotificationsState();
+
+  return (
+    <NotificationsContext.Provider value={value}>
+      {children}
+    </NotificationsContext.Provider>
+  );
+}
+
+export default function useNotifications() {
+  const context = useContext(NotificationsContext);
+
+  if (!context) {
+    throw new Error("useNotifications must be used within NotificationsProvider");
+  }
+
+  return context;
 }

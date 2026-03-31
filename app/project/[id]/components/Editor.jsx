@@ -176,9 +176,9 @@ const MonacoEditor = () => {
   const debouncedSave = useCallback(
     debounce((nodeId, content) => {
       if (!permissions.canEdit) return;
-      dispatch(updateFileContent({ nodeId, content }));
+      dispatch(updateFileContent({ nodeId, content, projectId }));
     }, 2000),
-    [dispatch, permissions.canEdit]
+    [dispatch, permissions.canEdit, projectId]
   );
 
   // Handle editor content change

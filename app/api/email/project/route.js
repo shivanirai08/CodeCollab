@@ -1,10 +1,41 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 
 export const runtime = "nodejs";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+
+function createSmtpTransport() {
+  const smtpUser =
+    process.env.GMAIL_SMTP_EMAIL ||
+    process.env.SMTP_USER ||
+    process.env.EMAIL_USER ||
+    "";
+  const smtpPass =
+    process.env.GMAIL_SMTP_APP_PASSWORD ||
+    process.env.SMTP_PASS ||
+    process.env.EMAIL_PASS ||
+    "";
+
+  if (!smtpUser || !smtpPass) {
+    return {
+      transport: null,
+      smtpUser,
+      smtpPass,
+    };
+  }
+
+  return {
+    transport: nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: smtpUser,
+        pass: smtpPass,
+      },
+    }),
+    smtpUser,
+    smtpPass,
+  };
+}
 
 function escapeHtml(value) {
   return String(value || "")
@@ -113,9 +144,15 @@ function buildEmailPayload({ event, owner, requester, project, joinRequest }) {
 
 export async function POST(req) {
   try {
-    if (!process.env.RESEND_API_KEY) {
+    const { transport, smtpUser, smtpPass } = createSmtpTransport();
+
+    if (!transport) {
+      console.error("[ProjectEmailRoute] Missing Gmail SMTP credentials");
       return Response.json(
-        { error: "RESEND_API_KEY is not configured" },
+        {
+          error:
+            "Gmail SMTP credentials are not configured. Set GMAIL_SMTP_EMAIL and GMAIL_SMTP_APP_PASSWORD.",
+        },
         { status: 500 }
       );
     }
@@ -131,21 +168,64 @@ export async function POST(req) {
       joinRequest,
     });
 
+    console.log("[ProjectEmailRoute] Built email payload", {
+      event: event || null,
+      projectId: project?.id || null,
+      joinRequestId: joinRequest?.id || null,
+      smtpSender: smtpUser || null,
+      ownerEmail: owner?.email || null,
+      requesterEmail: requester?.email || null,
+      resolvedRecipient: toEmail || null,
+      subject: subject || null,
+    });
+
     if (!toEmail || !subject || !html) {
+      console.error("[ProjectEmailRoute] Invalid email payload", {
+        event: event || null,
+        projectId: project?.id || null,
+        joinRequestId: joinRequest?.id || null,
+        smtpSender: smtpUser || null,
+        ownerEmail: owner?.email || null,
+        requesterEmail: requester?.email || null,
+        resolvedRecipient: toEmail || null,
+      });
       return Response.json(
         { error: "Invalid email payload" },
         { status: 400 }
       );
     }
 
-    await resend.emails.send({
-      from: "CodeCollab <onboarding@resend.dev>",
+    const smtpResult = await transport.sendMail({
+      from: `CodeCollab <${smtpUser}>`,
       to: toEmail,
       subject,
       html,
     });
 
-    return Response.json({ success: true });
+    console.log("[ProjectEmailRoute] SMTP send result", {
+      event: event || null,
+      projectId: project?.id || null,
+      joinRequestId: joinRequest?.id || null,
+      smtpSender: smtpUser || null,
+      resolvedRecipient: toEmail,
+      messageId: smtpResult?.messageId || null,
+      accepted: smtpResult?.accepted || [],
+      rejected: smtpResult?.rejected || [],
+      response: smtpResult?.response || null,
+    });
+
+    if (Array.isArray(smtpResult?.rejected) && smtpResult.rejected.length > 0) {
+      return Response.json(
+        { error: `SMTP rejected recipient: ${smtpResult.rejected.join(", ")}` },
+        { status: 500 }
+      );
+    }
+
+    return Response.json({
+      success: true,
+      recipient: toEmail,
+      messageId: smtpResult?.messageId || null,
+    });
   } catch (error) {
     console.error("Project email route failed:", error);
     return Response.json(

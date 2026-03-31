@@ -9,6 +9,8 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import OnlineAvatars from "./OnlineAvatars";
 import VoiceCall from "./VoiceCall";
 import useVoiceCall from "@/hooks/useVoiceCall";
+import useNotifications from "@/hooks/useNotifications";
+import NotificationBell from "@/components/ui/NotificationBell";
 import { toast } from "sonner";
 
 
@@ -26,6 +28,7 @@ export default function TopBar({ onToggleChat, isChatOpen, onMenuClick }) {
   const projectId = params.id;
   const shouldOpenShareFromNotification =
     searchParams.get("panel") === "share" && permissions.isMember;
+  const { notifications } = useNotifications();
 
   // Real voice call hook — connects WebSocket + WebRTC SFU
   const {
@@ -63,6 +66,16 @@ export default function TopBar({ onToggleChat, isChatOpen, onMenuClick }) {
 
   // Prefer Redux user ID for stable identity across WS/presence sources.
   const currentUserId = reduxUserId || voiceUserId || "current-user";
+  const projectJoinRequestAlertCount = useMemo(() => {
+    if (!permissions.isOwner) return 0;
+
+    return notifications.filter(
+      (notification) =>
+        !notification.is_read &&
+        notification.type === "join_request" &&
+        notification.metadata?.projectId === projectId
+    ).length;
+  }, [notifications, permissions.isOwner, projectId]);
 
   const isValidDisplayName = (name) => {
     if (!name) return false;
@@ -133,6 +146,11 @@ export default function TopBar({ onToggleChat, isChatOpen, onMenuClick }) {
         >
           <span className="hidden sm:inline">Share</span>
           <span className="sm:hidden">S</span>
+          {projectJoinRequestAlertCount > 0 && (
+            <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-black/80 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+              {projectJoinRequestAlertCount}
+            </span>
+          )}
         </Button>
       );
     }
@@ -229,6 +247,8 @@ export default function TopBar({ onToggleChat, isChatOpen, onMenuClick }) {
           onLeaveCall={leaveCall}
           onToggleMute={toggleMute}
         />
+
+        <NotificationBell />
 
         {/* Chat Button */}
         <Button

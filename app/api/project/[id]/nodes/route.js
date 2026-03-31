@@ -92,18 +92,30 @@ export async function POST(req, { params: paramsPromise }) {
       );
     }
 
-    const { data, error } = await admin
+    const payload = {
+      project_id: id,
+      parent_id: parent_id || null,
+      name,
+      type,
+      content: content || "",
+      language: language || null,
+    };
+
+    let { data, error } = await admin
       .from("nodes")
-      .insert({
-        project_id: id,
-        parent_id: parent_id || null,
-        name,
-        type,
-        content: content || "",
-        language: language || null,
-      })
+      .insert(payload)
       .select()
       .single();
+
+    // Backward compatibility for DBs where `nodes.language` is not created yet.
+    if (error?.message?.includes("Could not find the 'language' column of 'nodes'")) {
+      const { language: _ignoredLanguage, ...payloadWithoutLanguage } = payload;
+      ({ data, error } = await admin
+        .from("nodes")
+        .insert(payloadWithoutLanguage)
+        .select()
+        .single());
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

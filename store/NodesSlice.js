@@ -1,6 +1,21 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { showLoader, hideLoader } from "./LoadingSlice";
 
+function notifyProjectAccessLost(projectId, errorMessage) {
+  if (typeof window === "undefined" || !projectId) {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent("project-access-lost", {
+      detail: {
+        projectId,
+        error: errorMessage || "You no longer have access to this project.",
+      },
+    })
+  );
+}
+
 const initialState = {
   nodes: [],
   activeFileId: null,
@@ -25,6 +40,9 @@ export const fetchNodes = createAsyncThunk(
       if (!res.ok) {
         const errorData = await res.json();
         console.error("Fetch nodes failed:", errorData);
+        if (res.status === 401 || res.status === 403) {
+          notifyProjectAccessLost(projectId, errorData.error);
+        }
         throw new Error(errorData.error || "Failed to fetch nodes");
       }
       
@@ -120,7 +138,7 @@ export const updateNode = createAsyncThunk(
 // Update file content (debounced save)
 export const updateFileContent = createAsyncThunk(
   "nodes/updateFileContent",
-  async ({ nodeId, content }, { rejectWithValue }) => {
+  async ({ nodeId, content, projectId }, { rejectWithValue }) => {
     try {
       const res = await fetch(`/api/project/nodes/${nodeId}`, {
         method: "PATCH",
@@ -131,6 +149,9 @@ export const updateFileContent = createAsyncThunk(
       
       if (!res.ok) {
         const errorData = await res.json();
+        if (res.status === 401 || res.status === 403) {
+          notifyProjectAccessLost(projectId, errorData.error);
+        }
         throw new Error(errorData.error || "Failed to update file content");
       }
       

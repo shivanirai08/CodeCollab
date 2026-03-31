@@ -12,6 +12,42 @@ import {
 import { createNotification } from "@/lib/notifications";
 import { sendProjectAccessEmail } from "@/lib/email";
 
+async function getCurrentUserProfile(admin, userId) {
+  const { data } = await admin
+    .from("users")
+    .select("id, username, email, avatar_url")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (data?.email) {
+    return data;
+  }
+
+  const {
+    data: { user },
+    error,
+  } = await admin.auth.admin.getUserById(userId);
+
+  if (error || !user) {
+    return data;
+  }
+
+  return {
+    id: data?.id || user.id,
+    username:
+      data?.username ||
+      user.user_metadata?.username ||
+      user.email?.split("@")[0] ||
+      "User",
+    email: data?.email || user.email || "",
+    avatar_url:
+      data?.avatar_url ||
+      user.user_metadata?.avatar_url ||
+      user.user_metadata?.picture ||
+      null,
+  };
+}
+
 export async function PATCH(req, { params: paramsPromise }) {
   try {
     const { requestId } = await paramsPromise;
@@ -105,22 +141,15 @@ export async function PATCH(req, { params: paramsPromise }) {
       );
     }
 
-    const { data: reviewerProfile } = await admin
-      .from("users")
-      .select("id, username, email")
-      .eq("id", user.id)
-      .maybeSingle();
+    const reviewerProfile = await getCurrentUserProfile(admin, user.id);
 
     let requesterProfile = requestRecord.users || null;
 
     if (!requesterProfile?.email) {
-      const { data: requesterProfileFallback } = await admin
-        .from("users")
-        .select("id, username, email")
-        .eq("id", requestRecord.requester_id)
-        .maybeSingle();
-
-      requesterProfile = requesterProfileFallback || requesterProfile;
+      requesterProfile = await getCurrentUserProfile(
+        admin,
+        requestRecord.requester_id
+      );
     }
 
     if (action === "approve") {
@@ -189,7 +218,7 @@ export async function PATCH(req, { params: paramsPromise }) {
       },
     });
 
-    await sendProjectAccessEmail({
+    const emailResult = await sendProjectAccessEmail({
       event: action === "approve" ? "join_request_approved" : "join_request_rejected",
       project: requestRecord.projects,
       requester: requesterProfile,
@@ -199,6 +228,16 @@ export async function PATCH(req, { params: paramsPromise }) {
         status: finalStatus,
         accessType: finalRole,
       },
+    });
+
+    console.log("[JoinRequestReview] Review email result", {
+      event: action === "approve" ? "join_request_approved" : "join_request_rejected",
+      requestId,
+      projectId,
+      requesterId: requestRecord.requester_id,
+      requesterEmail: requesterProfile?.email || null,
+      reviewerId: user.id,
+      emailResult,
     });
 
     return NextResponse.json({

@@ -25,7 +25,33 @@ async function getCurrentUserProfile(admin, userId) {
     .eq("id", userId)
     .maybeSingle();
 
-  return data;
+  if (data?.email) {
+    return data;
+  }
+
+  const {
+    data: { user },
+    error,
+  } = await admin.auth.admin.getUserById(userId);
+
+  if (error || !user) {
+    return data;
+  }
+
+  return {
+    id: data?.id || user.id,
+    username:
+      data?.username ||
+      user.user_metadata?.username ||
+      user.email?.split("@")[0] ||
+      "User",
+    email: data?.email || user.email || "",
+    avatar_url:
+      data?.avatar_url ||
+      user.user_metadata?.avatar_url ||
+      user.user_metadata?.picture ||
+      null,
+  };
 }
 
 export async function POST(req) {
@@ -214,11 +240,7 @@ export async function POST(req) {
       },
     });
 
-    const { data: ownerProfile } = await admin
-      .from("users")
-      .select("id, username, email")
-      .eq("id", project.owner_id)
-      .maybeSingle();
+    const ownerProfile = await getCurrentUserProfile(admin, project.owner_id);
 
     await sendProjectAccessEmail({
       event: "join_request_created",

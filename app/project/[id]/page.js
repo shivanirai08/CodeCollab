@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchProject, memberProject, clearProject } from "@/store/ProjectSlice";
 import { fetchNodes } from "@/store/NodesSlice";
@@ -65,16 +65,34 @@ export default function ProjectWorkspacePage() {
   };
 
   // Handle when current user is removed from project
-  const handleUserRemoved = () => {
+  const handleUserRemoved = useCallback(() => {
     setRealtimeEnabled(false);  // Disable real-time to stop further updates
     dispatch(clearProject());   // Clear project state and permissions
     setShowRemovedModal(true);
-  };
+  }, [dispatch]);
 
   // Real-time subscriptions for nodes, presence, and members
   useRealtimeNodes(projectId, realtimeEnabled, currentUserId);
   useRealtimePresence(projectId, realtimeEnabled);
   useRealtimeMembers(projectId, realtimeEnabled, handleUserRemoved);
+
+  useEffect(() => {
+    const handleAccessLost = (event) => {
+      const lostProjectId = event?.detail?.projectId;
+
+      if (String(lostProjectId) !== String(projectId)) {
+        return;
+      }
+
+      handleUserRemoved();
+    };
+
+    window.addEventListener("project-access-lost", handleAccessLost);
+
+    return () => {
+      window.removeEventListener("project-access-lost", handleAccessLost);
+    };
+  }, [handleUserRemoved, projectId]);
 
   useEffect(() => {
     // Fetch user info first for presence tracking
