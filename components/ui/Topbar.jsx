@@ -3,13 +3,14 @@
 import { Button } from "@/components/ui/button"
 import LoadingButton from "@/components/ui/LoadingButton"
 import { Input } from "@/components/ui/input"
-import { Search, Bell, Menu, Plus, X, LogOut } from "lucide-react"
+import { Search, Menu, Plus, X, LogOut } from "lucide-react"
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { setSearchQuery } from "@/store/SearchSlice";
+import NotificationBell from "@/components/ui/NotificationBell";
 
 export default function Topbar({ onMenuClick }) {
   const router = useRouter();
@@ -196,9 +197,7 @@ export default function Topbar({ onMenuClick }) {
                       )}
                     </div>
 
-                    <Button variant="ghost" size="icon" className="rounded-full bg-[#212126] hover:bg-[#2F2F35] size-10">
-                      <Bell className="size-5" />
-                    </Button>
+                    <NotificationBell />
                     
                     {/* Profile Menu */}
                     <div className="relative">

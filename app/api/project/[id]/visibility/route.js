@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 export async function PATCH(req, { params: paramsPromise }) {
   try {
     const { id } = await paramsPromise;
-    const supabase = await createClient();
+    const supabase = await createClient(req);
     const { visibility } = await req.json();
 
     if (!id) {

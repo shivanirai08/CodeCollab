@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { MoreVertical, Trash2 } from "lucide-react";
+import { Check, Copy, MoreVertical, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useDispatch } from "react-redux";
@@ -16,12 +16,15 @@ export default function ProjectCard({
   lastEditedText,
   participants = [],
   role = "collaborator",
+  joinCode = "",
 })
 {
   const router = useRouter();
   const dispatch = useDispatch();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [copiedJoinCode, setCopiedJoinCode] = useState(false);
+  const canCopyJoinCode = Boolean(joinCode) && role !== "viewer";
 
   const handleDelete = async () => {
     try {
@@ -31,6 +34,20 @@ export default function ProjectCard({
       setMenuOpen(false);
     } catch (error) {
       toast.error(error || "Failed to delete project");
+    }
+  };
+
+  const handleCopyJoinCode = async (e) => {
+    e.stopPropagation();
+
+    try {
+      await navigator.clipboard.writeText(joinCode);
+      setCopiedJoinCode(true);
+      toast.success("Join code copied");
+      setTimeout(() => setCopiedJoinCode(false), 2000);
+      setMenuOpen(false);
+    } catch (error) {
+      toast.error("Failed to copy join code");
     }
   };
 
@@ -90,7 +107,20 @@ export default function ProjectCard({
                     setMenuOpen(false);
                   }}
                 />
-                <div className="absolute right-0 top-10 z-50 w-40 rounded-lg bg-[#212126] border border-gray-800 shadow-lg overflow-hidden">
+                <div className="absolute right-0 top-10 z-50 w-44 rounded-lg bg-[#212126] border border-gray-800 shadow-lg overflow-hidden">
+                  {canCopyJoinCode && (
+                    <button
+                      className="w-full px-4 py-2.5 text-left text-sm hover:bg-[#2F2F35] transition-colors flex items-center gap-2 text-white"
+                      onClick={handleCopyJoinCode}
+                    >
+                      {copiedJoinCode ? (
+                        <Check className="size-4 text-green-400" />
+                      ) : (
+                        <Copy className="size-4" />
+                      )}
+                      Copy join code
+                    </button>
+                  )}
                   <button
                     className="w-full px-4 py-2.5 text-left text-sm hover:bg-[#2F2F35] transition-colors flex items-center gap-2 text-red-400 hover:text-red-300"
                     onClick={(e) => {

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { normalizeMemberRole } from "@/lib/projectAccess";
 
 export async function DELETE(request) {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient(request);
 
     // Get the current logged-in user
     const {
@@ -36,7 +37,7 @@ export async function DELETE(request) {
     }
 
     // If user is owner, delete the entire project
-    if (membership.role === "owner") {
+    if (normalizeMemberRole(membership.role) === "owner") {
       const { error: deleteError } = await supabase
         .from("projects")
         .delete()
@@ -78,9 +79,9 @@ export async function DELETE(request) {
   }
 }
 
-export async function GET() {
+export async function GET(req) {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient(req);
 
     // Get the current logged-in user
     const {
@@ -104,7 +105,8 @@ export async function GET() {
           id,
           title,
           thumbnail,
-          updated_at
+          updated_at,
+          join_code
         )
       `)
       .eq("user_id", userId);
@@ -180,11 +182,13 @@ export async function GET() {
           id: p.id,
           title: p.title || "Untitled Project",
           thumbnail: p.thumbnail || null,
+          joinCode:
+            normalizeMemberRole(m.role) === "viewer" ? null : p.join_code || null,
           lastEditedText: p.updated_at
             ? `Last edited ${new Date(p.updated_at).toLocaleDateString()}`
             : "Never edited",
           participants: membersByProject[p.id] || [],
-          role: m.role,
+          role: normalizeMemberRole(m.role),
         };
       })
       .filter((p) => p !== null); // Remove any null projects

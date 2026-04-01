@@ -146,6 +146,7 @@ export default function ProjectsPage() {
                 title={p.title}
                 description={p.description}
                 thumbnail={p.thumbnail}
+                joinCode={p.joinCode}
                 participants={p.participants}
                 lastEditedText={p.lastEditedText}
                 role={p.role}

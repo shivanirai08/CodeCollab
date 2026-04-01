@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  getProjectContext,
+  JOIN_REQUEST_STATUS,
+  normalizeAccessType,
+} from "@/lib/projectAccess";
 
 export async function GET(req, { params: paramsPromise }) {
   try {
     const { id } = await paramsPromise;
-    const supabase = await createClient();
+    const supabase = await createClient(req);
+    const admin = createAdminClient();
 
     if (!id) {
       return NextResponse.json(
@@ -13,66 +20,63 @@ export async function GET(req, { params: paramsPromise }) {
       );
     }
 
-    // Get current user
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    // Fetch project
-    const { data: project, error: projectError } = await supabase
-      .from("projects")
-      .select("*")
-      .eq("id", id)
-      .single();
+    const context = await getProjectContext(id, user?.id || null);
 
-    if (projectError || !project) {
+    if (!context?.project) {
       return NextResponse.json(
         { error: "Project not found" },
         { status: 404 }
       );
     }
 
-    // Determine role
-    let isOwner = false;
-    let isCollaborator = false;
+    let latestRequest = null;
 
-    if (user) {
-        const { data: membership } = await supabase
-          .from("project_members")
-          .select("role")
-          .eq("project_id", id)
-          .eq("user_id", user.id)
-          .single();
+    if (user?.id && !context.permissions.isMember && context.project.owner_id !== user.id) {
+      const { data: request } = await admin
+        .from("project_join_requests")
+        .select("id, status, access_type, requested_at, reviewed_at")
+        .eq("project_id", id)
+        .eq("requester_id", user.id)
+        .order("requested_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-        isCollaborator = !!membership;
-        isOwner = project.owner_id === user.id;
-    }
-
-    const canEdit = isOwner || isCollaborator;
-    const canView = project.visibility === "public" || canEdit;
-
-    if (!canView) {
-      return NextResponse.json(
-        { error: "You don't have permission to view this project" },
-        { status: 403 }
-      );
+      if (request) {
+        latestRequest = {
+          id: request.id,
+          status: request.status,
+          accessType: normalizeAccessType(request.access_type),
+          requestedAt: request.requested_at,
+          reviewedAt: request.reviewed_at,
+        };
+      }
     }
 
     return NextResponse.json({
       project: {
-        projectid: project.id,
-        projectname: project.title,
-        description: project.description,
-        visibility: project.visibility,
-        join_code: project.join_code,
-        owner_id: project.owner_id,
+        projectid: context.project.id,
+        projectname: context.project.title,
+        description: context.project.description,
+        visibility: context.project.visibility,
+        join_code: context.project.join_code,
+        owner_id: context.project.owner_id,
       },
       permissions: {
-        canEdit,
-        canView,
-        isOwner,
-        isCollaborator,
+        canEdit: context.permissions.canEdit,
+        canView: context.permissions.canView,
+        isOwner: context.permissions.isOwner,
+        isMember: context.permissions.isMember,
+        isCollaborator: context.permissions.isCollaborator,
+        isViewer: context.permissions.isViewer,
       },
+      accessRequest: latestRequest,
+      accessState: context.permissions.isMember
+        ? "member"
+        : latestRequest?.status || "not_joined",
     });
   } catch (err) {
     console.error("Error fetching project:", err);

@@ -1,45 +1,89 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { ensureProjectAccess, getNodeWithProject } from "@/lib/projectAccess";
 
-const service = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+async function getNodeAccess(nodeId, userId, requireEdit = false) {
+  const node = await getNodeWithProject(nodeId);
 
-export async function GET(req, { params }) {
+  if (!node?.projects?.id) {
+    return {
+      ok: false,
+      status: 404,
+      error: "Node not found",
+    };
+  }
+
+  const access = await ensureProjectAccess({
+    projectId: node.projects.id,
+    userId,
+    requireView: true,
+    requireEdit,
+  });
+
+  if (!access.ok) {
+    return access;
+  }
+
+  return {
+    ok: true,
+    node,
+    context: access.context,
+  };
+}
+
+export async function GET(req, { params: paramsPromise }) {
   try {
-    const { nodeId } = params;
+    const { nodeId } = await paramsPromise;
+    const supabase = await createClient(req);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (!nodeId) {
       return NextResponse.json({ error: "Node id required" }, { status: 400 });
     }
 
-    const { data, error } = await service
-      .from("nodes")
-      .select("*")
-      .eq("id", nodeId)
-      .single();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+    const access = await getNodeAccess(nodeId, user?.id || null, false);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
-    return NextResponse.json({ node: data });
+    return NextResponse.json({ node: access.node });
   } catch (err) {
-    return NextResponse.json({ error: err.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message || "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
 
-export async function PATCH(req, { params }) {
+export async function PATCH(req, { params: paramsPromise }) {
   try {
-    const { nodeId } = await params;
-    const updates = await req.json();
+    const { nodeId } = await paramsPromise;
+    const supabase = await createClient(req);
+    const admin = createAdminClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     if (!nodeId) {
       return NextResponse.json({ error: "Node id required" }, { status: 400 });
     }
 
-    const { data, error } = await service
+    const access = await getNodeAccess(nodeId, user.id, true);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+
+    const updates = await req.json();
+
+    const { data, error } = await admin
       .from("nodes")
       .update(updates)
       .eq("id", nodeId)
@@ -52,19 +96,37 @@ export async function PATCH(req, { params }) {
 
     return NextResponse.json({ node: data });
   } catch (err) {
-    return NextResponse.json({ error: err.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message || "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
 
-export async function DELETE(req, { params }) {
+export async function DELETE(req, { params: paramsPromise }) {
   try {
-    const { nodeId } = params;
+    const { nodeId } = await paramsPromise;
+    const supabase = await createClient(req);
+    const admin = createAdminClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     if (!nodeId) {
       return NextResponse.json({ error: "Node id required" }, { status: 400 });
     }
 
-    const { error } = await service.from("nodes").delete().eq("id", nodeId);
+    const access = await getNodeAccess(nodeId, user.id, true);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+
+    const { error } = await admin.from("nodes").delete().eq("id", nodeId);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
@@ -72,6 +134,9 @@ export async function DELETE(req, { params }) {
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: err.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message || "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }

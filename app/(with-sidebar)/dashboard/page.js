@@ -82,6 +82,7 @@ export default function DashboardPage() {
                   title={p.title}
                   description={p.description}
                   thumbnail={p.thumbnail}
+                  joinCode={p.joinCode}
                   lastEditedText={p.lastEditedText}
                   participants={p.participants}
                   role={p.role}

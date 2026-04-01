@@ -10,7 +10,13 @@ import { toast } from "sonner";
 import { useRealtimeChat } from "@/hooks/useRealtimeChat";
 import DeleteModal from "@/components/ui/DeleteModal";
 
-export default function ChatPanel({ isChatOpen, onClose, projectId, realtimeEnabled }) {
+export default function ChatPanel({
+  isChatOpen,
+  onClose,
+  projectId,
+  realtimeEnabled,
+  onUnreadChange,
+}) {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
@@ -67,13 +73,17 @@ export default function ChatPanel({ isChatOpen, onClose, projectId, realtimeEnab
           : newMessage.message,
         duration: 3000,
       });
+
+      if (!isChatOpenRef.current) {
+        onUnreadChange?.(true);
+      }
     }
 
     // Auto-scroll to bottom on new message if chat is open
     if (isChatOpenRef.current) {
       setTimeout(scrollToBottom, 100);
     }
-  }, [currentUser.id]);
+  }, [currentUser.id, onUnreadChange]);
 
   // Initialize realtime chat hook
   const { fetchMessages, sendMessage, deleteMessage } = useRealtimeChat(
@@ -107,6 +117,12 @@ export default function ChatPanel({ isChatOpen, onClose, projectId, realtimeEnab
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isChatOpen, projectId, realtimeEnabled]); // fetchMessages intentionally excluded - it's stable and we only want to fetch once
+
+  useEffect(() => {
+    if (isChatOpen) {
+      onUnreadChange?.(false);
+    }
+  }, [isChatOpen, onUnreadChange]);
 
   // Cleanup processed IDs when component unmounts
   useEffect(() => {

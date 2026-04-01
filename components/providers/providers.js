@@ -4,6 +4,7 @@ import { Provider } from "react-redux";
 import store from "@/store/store";
 import dynamic from "next/dynamic";
 import { Suspense } from "react";
+import { NotificationsProvider } from "@/hooks/useNotifications";
 
 // Lazy load heavy components that aren't needed immediately
 const ToastProvider = dynamic(() => import("./ToastProvider"), { 
@@ -24,13 +25,15 @@ function ProviderErrorFallback() {
 export default function Providers({ children }) {
   return (
     <Provider store={store}>
-      <Suspense fallback={null}>
-        <GlobalLoader />
-      </Suspense>
-      {children}
-      <Suspense fallback={null}>
-        <ToastProvider />
-      </Suspense>
+      <NotificationsProvider>
+        <Suspense fallback={null}>
+          <GlobalLoader />
+        </Suspense>
+        {children}
+        <Suspense fallback={null}>
+          <ToastProvider />
+        </Suspense>
+      </NotificationsProvider>
     </Provider>
   );
 }

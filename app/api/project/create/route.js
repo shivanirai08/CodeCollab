@@ -28,7 +28,7 @@ export async function POST(req) {
   }
 
   try {
-    const supabase = await createClient();
+    const supabase = await createClient(req);
     const body = await req.json();
     const { projectName, description, visibility } = body;
 

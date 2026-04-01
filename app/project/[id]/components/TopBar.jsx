@@ -5,19 +5,35 @@ import { FiMessageSquare } from "react-icons/fi";
 import { useState, useMemo, useEffect } from "react";
 import SharePanel from "./SharePanel";
 import { useSelector } from "react-redux";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import OnlineAvatars from "./OnlineAvatars";
 import VoiceCall from "./VoiceCall";
 import useVoiceCall from "@/hooks/useVoiceCall";
+import useNotifications from "@/hooks/useNotifications";
+import NotificationBell from "@/components/ui/NotificationBell";
+import { toast } from "sonner";
 
 
-export default function TopBar({ onToggleChat, isChatOpen, onMenuClick }) {
+export default function TopBar({
+  onToggleChat,
+  isChatOpen,
+  onMenuClick,
+  hasUnreadChat = false,
+}) {
   const project = useSelector((state) => state.project);
   const onlineUsers = useSelector((state) => state.project.onlineUsers);
   const reduxUserId = useSelector((state) => state.user.id);
+  const permissions = useSelector((state) => state.project.permissions);
+  const accessState = useSelector((state) => state.project.accessState);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isRequestingAccess, setIsRequestingAccess] = useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const params = useParams();
   const projectId = params.id;
+  const shouldOpenShareFromNotification =
+    searchParams.get("panel") === "share" && permissions.isMember;
+  const { notifications } = useNotifications();
 
   // Real voice call hook — connects WebSocket + WebRTC SFU
   const {
@@ -47,8 +63,24 @@ export default function TopBar({ onToggleChat, isChatOpen, onMenuClick }) {
     }
   }, [getRoomInfo, voiceRoomId]);
 
+  useEffect(() => {
+    if (shouldOpenShareFromNotification) {
+      setIsShareOpen(true);
+    }
+  }, [shouldOpenShareFromNotification]);
+
   // Prefer Redux user ID for stable identity across WS/presence sources.
   const currentUserId = reduxUserId || voiceUserId || "current-user";
+  const projectJoinRequestAlertCount = useMemo(() => {
+    if (!permissions.isOwner) return 0;
+
+    return notifications.filter(
+      (notification) =>
+        !notification.is_read &&
+        notification.type === "join_request" &&
+        notification.metadata?.projectId === projectId
+    ).length;
+  }, [notifications, permissions.isOwner, projectId]);
 
   const isValidDisplayName = (name) => {
     if (!name) return false;
@@ -80,6 +112,105 @@ export default function TopBar({ onToggleChat, isChatOpen, onMenuClick }) {
       };
     });
   }, [participants, onlineUsers]);
+
+  const handleRequestAccess = async () => {
+    setIsRequestingAccess(true);
+    try {
+      const res = await fetch("/api/project/join", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          projectId,
+          accessType: "collaborator",
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to request access");
+      }
+
+      toast.success(data.message || "Request sent");
+      window.location.reload();
+    } catch (error) {
+      toast.error(error.message || "Failed to request access");
+    } finally {
+      setIsRequestingAccess(false);
+    }
+  };
+
+  const renderAccessButton = () => {
+    if (permissions.isMember) {
+      return (
+        <Button
+          className="bg-gradient-to-b from-[#FFF] to-[#6B696D] px-3 md:px-6 py-2 text-sm md:text-base h-9 md:h-10"
+          onClick={() => setIsShareOpen(true)}
+        >
+          <span className="hidden sm:inline">Share</span>
+          <span className="sm:hidden">S</span>
+          {/* {projectJoinRequestAlertCount > 0 && (
+            <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-black/80 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+              {projectJoinRequestAlertCount}
+            </span>
+          )} */}
+        </Button>
+      );
+    }
+
+    if (accessState === "pending") {
+      return (
+        <Button
+          disabled
+          className="bg-[#2B2B30] text-gray-300 px-3 md:px-6 py-2 text-sm md:text-base h-9 md:h-10"
+        >
+          Request Sent
+        </Button>
+      );
+    }
+
+    if (accessState === "approved") {
+      return (
+        <Button
+          className="bg-gradient-to-b from-[#FFF] to-[#6B696D] px-3 md:px-6 py-2 text-sm md:text-base h-9 md:h-10 text-black"
+          onClick={() => window.location.reload()}
+        >
+          Enter Project
+        </Button>
+      );
+    }
+
+    if (accessState === "rejected") {
+      return (
+        <Button
+          disabled
+          className="bg-red-500/10 text-red-300 px-3 md:px-6 py-2 text-sm md:text-base h-9 md:h-10"
+        >
+          Request Denied
+        </Button>
+      );
+    }
+
+    return (
+      <Button
+        className="bg-gradient-to-b from-[#FFF] to-[#6B696D] px-3 md:px-6 py-2 text-sm md:text-base h-9 md:h-10 text-black"
+        onClick={handleRequestAccess}
+        disabled={isRequestingAccess}
+      >
+        {isRequestingAccess ? "Sending..." : "Request Access"}
+      </Button>
+    );
+  };
+
+  const handleCloseShare = () => {
+    setIsShareOpen(false);
+
+    if (searchParams.get("panel") === "share") {
+      router.replace(`/project/${projectId}`);
+    }
+  };
 
   return (
     <div className="flex items-center justify-between px-3 md:px-4 pt-4 md:pt-6 pb-2">
@@ -122,29 +253,33 @@ export default function TopBar({ onToggleChat, isChatOpen, onMenuClick }) {
           onToggleMute={toggleMute}
         />
 
+        <NotificationBell
+          projectId={projectId}
+          title="Project Notifications"
+          emptyMessage="No notifications for this project yet"
+        />
+
         {/* Chat Button */}
         <Button
           onClick={onToggleChat}
-          className={`rounded-full border border-[var(--border)] bg-transparent text-white hover:bg-[var(--accent)] w-9 h-9 md:w-10 md:h-10 p-0 ${isChatOpen ? "bg-[var(--secondary)]" : ""
+          className={`relative rounded-full border border-[var(--border)] bg-transparent text-white hover:bg-[var(--accent)] w-9 h-9 md:w-10 md:h-10 p-0 ${isChatOpen ? "bg-[var(--secondary)]" : ""
             }`}
         >
+          {hasUnreadChat && !isChatOpen && (
+            <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-red-500" />
+          )}
           <FiMessageSquare className="h-4 w-4 md:h-5 md:w-5" />
         </Button>
 
-        {/* Share Button */}
-        <Button
-          className="bg-gradient-to-b from-[#FFF] to-[#6B696D] px-3 md:px-6 py-2 text-sm md:text-base h-9 md:h-10"
-          onClick={() => setIsShareOpen(true)}
-        >
-          <span className="hidden sm:inline">Share</span>
-          <span className="sm:hidden">S</span>
-        </Button>
+        {renderAccessButton()}
       </div>
 
-      <SharePanel
-        isOpen={isShareOpen}
-        onClose={() => setIsShareOpen(false)}
-      />
+      {permissions.isMember && (
+        <SharePanel
+          isOpen={isShareOpen}
+          onClose={handleCloseShare}
+        />
+      )}
     </div>
   );
 }
