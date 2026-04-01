@@ -26,15 +26,31 @@ function formatRelativeTime(timestamp) {
   return date.toLocaleDateString();
 }
 
-export default function NotificationBell() {
+export default function NotificationBell({
+  projectId = null,
+  emptyMessage = "No notifications yet",
+  title = "Notifications",
+}) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const { notifications, unreadCount, markAsRead, markAllAsRead } =
-    useNotifications();
+  const { notifications, markAsRead, markAllAsRead } = useNotifications();
+
+  const filteredNotifications = useMemo(() => {
+    if (!projectId) return notifications;
+
+    return notifications.filter(
+      (notification) => notification.metadata?.projectId === projectId
+    );
+  }, [notifications, projectId]);
+
+  const filteredUnreadCount = useMemo(
+    () => filteredNotifications.filter((notification) => !notification.is_read).length,
+    [filteredNotifications]
+  );
 
   const visibleNotifications = useMemo(
-    () => notifications.slice(0, 10),
-    [notifications]
+    () => filteredNotifications.slice(0, 10),
+    [filteredNotifications]
   );
 
   const handleNotificationClick = async (notification) => {
@@ -59,7 +75,16 @@ export default function NotificationBell() {
   };
 
   const handleMarkAllAsRead = async () => {
-    await markAllAsRead();
+    if (!projectId) {
+      await markAllAsRead();
+      return;
+    }
+
+    await Promise.all(
+      filteredNotifications
+        .filter((notification) => !notification.is_read)
+        .map((notification) => markAsRead(notification.id))
+    );
   };
 
   return (
@@ -67,11 +92,11 @@ export default function NotificationBell() {
       <Button
         variant="ghost"
         size="icon"
-        className="relative rounded-full bg-[#212126] hover:bg-[#2F2F35] size-10"
+        className="relative rounded-full border border-[var(--border)] hover:bg-[#2F2F35] size-10"
         onClick={() => setOpen((prev) => !prev)}
       >
         <Bell className="size-5" />
-        {unreadCount > 0 && (
+        {filteredUnreadCount > 0 && (
           <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-red-500" />
         )}
       </Button>
@@ -82,9 +107,11 @@ export default function NotificationBell() {
           <div className="absolute right-0 top-12 z-50 w-[22rem] rounded-xl border border-gray-700 bg-[#212126] shadow-xl overflow-hidden">
             <div className="flex items-center justify-between border-b border-gray-700 px-4 py-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">Notifications</p>
+                <p className="text-sm font-semibold text-white">{title}</p>
                 <p className="text-xs text-gray-400">
-                  {unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
+                  {filteredUnreadCount > 0
+                    ? `${filteredUnreadCount} unread`
+                    : "All caught up"}
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -92,7 +119,7 @@ export default function NotificationBell() {
                 <button
                   type="button"
                   onClick={handleMarkAllAsRead}
-                  disabled={unreadCount === 0}
+                  disabled={filteredUnreadCount === 0}
                   className="text-xs font-medium text-gray-300 transition-colors hover:text-white disabled:cursor-not-allowed disabled:text-gray-500"
                 >
                   Mark all read
@@ -103,7 +130,7 @@ export default function NotificationBell() {
             <div className="max-h-[26rem] overflow-y-auto">
               {visibleNotifications.length === 0 ? (
                 <div className="px-4 py-8 text-center text-sm text-gray-400">
-                  No notifications yet
+                  {emptyMessage}
                 </div>
               ) : (
                 visibleNotifications.map((notification) => (

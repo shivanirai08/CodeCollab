@@ -57,6 +57,7 @@ export default function ProjectWorkspacePage() {
   const [showRemovedModal, setShowRemovedModal] = useState(false);
   const [realtimeEnabled, setRealtimeEnabled] = useState(false);
   const [mobileFileSidebarOpen, setMobileFileSidebarOpen] = useState(false);
+  const [hasUnreadChat, setHasUnreadChat] = useState(false);
 
   // Function to open terminal and switch to Problems tab
   const openProblemsTab = () => {
@@ -125,6 +126,12 @@ export default function ProjectWorkspacePage() {
     }
   }, [dispatch, projectId]);
 
+  useEffect(() => {
+    if (isChatOpen) {
+      setHasUnreadChat(false);
+    }
+  }, [isChatOpen]);
+
   // Also check after project status changes (public <-> private)
   useEffect(() => {
     if (projectStatus === "succeeded") {
@@ -180,6 +187,7 @@ export default function ProjectWorkspacePage() {
             onToggleChat={() => setIsChatOpen((v) => !v)}
             isChatOpen={isChatOpen}
             onMenuClick={() => setMobileFileSidebarOpen(true)}
+            hasUnreadChat={hasUnreadChat}
           />
 
           {/* Workspace frame */}
@@ -239,6 +247,7 @@ export default function ProjectWorkspacePage() {
               onClose={() => setIsChatOpen(false)}
               projectId={projectId}
               realtimeEnabled={realtimeEnabled}
+              onUnreadChange={setHasUnreadChat}
             />
           </div>
         </div>

@@ -261,6 +261,7 @@ export async function POST(req) {
       joined: false,
       state: JOIN_REQUEST_STATUS.PENDING,
       message: "Request sent",
+      projectTitle: project.title,
       request: {
         id: joinRequest.id,
         status: joinRequest.status,

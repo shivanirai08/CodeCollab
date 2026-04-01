@@ -23,6 +23,8 @@ function useNotificationsState() {
   const unsubscribeRef = useRef(null);
   const seenNotificationIdsRef = useRef(new Set());
   const initializedRef = useRef(false);
+  const authListenerRef = useRef(null);
+  const userIdRef = useRef(null);
 
   const recomputeUnreadCount = useCallback((items) => {
     setUnreadCount(items.filter((item) => !item.is_read).length);
@@ -113,22 +115,32 @@ function useNotificationsState() {
     let mounted = true;
     const supabase = createClient();
 
-    async function initialize() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    const cleanupSubscription = async () => {
+      if (unsubscribeRef.current) {
+        await unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+    };
 
-      if (!mounted || !user?.id) {
+    const subscribeForUser = async (nextUserId) => {
+      await cleanupSubscription();
+
+      if (!mounted || !nextUserId) {
+        setUserId(null);
+        userIdRef.current = null;
+        setNotifications([]);
+        setUnreadCount(0);
         setLoading(false);
+        initializedRef.current = false;
+        seenNotificationIdsRef.current = new Set();
         return;
       }
 
-      setUserId(user.id);
-      await fetchNotifications();
-
+      setUserId(nextUserId);
+      userIdRef.current = nextUserId;
       realtimeRef.current = getRealtimeService();
       unsubscribeRef.current = realtimeRef.current.subscribeToNotifications(
-        user.id,
+        nextUserId,
         {
           onInsert: (notification) => {
             setNotifications((prev) => {
@@ -159,18 +171,73 @@ function useNotificationsState() {
               return next;
             });
           },
+          onStatusChange: (status) => {
+            if (!mounted) return;
+
+            if (status === "SUBSCRIBED") {
+              fetchNotifications();
+            }
+
+            if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+              fetchNotifications();
+            }
+          },
         }
       );
+    };
+
+    async function initialize() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!mounted) return;
+
+      if (!user?.id) {
+        setLoading(false);
+        return;
+      }
+
+      await subscribeForUser(user.id);
+      await fetchNotifications();
     }
 
     initialize();
 
+    authListenerRef.current = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (!mounted) return;
+
+        const nextUserId = session?.user?.id || null;
+
+        if (!nextUserId) {
+          await subscribeForUser(null);
+          return;
+        }
+
+        if (nextUserId !== userIdRef.current) {
+          await subscribeForUser(nextUserId);
+        }
+
+        await fetchNotifications();
+      }
+    );
+
+    const handleWindowFocus = () => {
+      if (document.visibilityState === "visible") {
+        fetchNotifications();
+      }
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleWindowFocus);
+
     return () => {
       mounted = false;
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-        unsubscribeRef.current = null;
-      }
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleWindowFocus);
+      authListenerRef.current?.data?.subscription?.unsubscribe?.();
+      cleanupSubscription();
     };
   }, [fetchNotifications, recomputeUnreadCount]);
 

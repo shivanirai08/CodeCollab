@@ -14,7 +14,12 @@ import NotificationBell from "@/components/ui/NotificationBell";
 import { toast } from "sonner";
 
 
-export default function TopBar({ onToggleChat, isChatOpen, onMenuClick }) {
+export default function TopBar({
+  onToggleChat,
+  isChatOpen,
+  onMenuClick,
+  hasUnreadChat = false,
+}) {
   const project = useSelector((state) => state.project);
   const onlineUsers = useSelector((state) => state.project.onlineUsers);
   const reduxUserId = useSelector((state) => state.user.id);
@@ -146,11 +151,11 @@ export default function TopBar({ onToggleChat, isChatOpen, onMenuClick }) {
         >
           <span className="hidden sm:inline">Share</span>
           <span className="sm:hidden">S</span>
-          {projectJoinRequestAlertCount > 0 && (
+          {/* {projectJoinRequestAlertCount > 0 && (
             <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-black/80 px-1.5 py-0.5 text-[10px] font-semibold text-white">
               {projectJoinRequestAlertCount}
             </span>
-          )}
+          )} */}
         </Button>
       );
     }
@@ -248,14 +253,21 @@ export default function TopBar({ onToggleChat, isChatOpen, onMenuClick }) {
           onToggleMute={toggleMute}
         />
 
-        <NotificationBell />
+        <NotificationBell
+          projectId={projectId}
+          title="Project Notifications"
+          emptyMessage="No notifications for this project yet"
+        />
 
         {/* Chat Button */}
         <Button
           onClick={onToggleChat}
-          className={`rounded-full border border-[var(--border)] bg-transparent text-white hover:bg-[var(--accent)] w-9 h-9 md:w-10 md:h-10 p-0 ${isChatOpen ? "bg-[var(--secondary)]" : ""
+          className={`relative rounded-full border border-[var(--border)] bg-transparent text-white hover:bg-[var(--accent)] w-9 h-9 md:w-10 md:h-10 p-0 ${isChatOpen ? "bg-[var(--secondary)]" : ""
             }`}
         >
+          {hasUnreadChat && !isChatOpen && (
+            <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-red-500" />
+          )}
           <FiMessageSquare className="h-4 w-4 md:h-5 md:w-5" />
         </Button>
 
