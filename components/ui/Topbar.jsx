@@ -3,22 +3,25 @@
 import { Button } from "@/components/ui/button"
 import LoadingButton from "@/components/ui/LoadingButton"
 import { Input } from "@/components/ui/input"
-import { Search, Menu, Plus, X, LogOut } from "lucide-react"
+import { Search, Menu, Plus, X, LogOut, ExternalLink } from "lucide-react"
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { FaGithub } from "react-icons/fa";
 import { setSearchQuery } from "@/store/SearchSlice";
 import NotificationBell from "@/components/ui/NotificationBell";
 
 export default function Topbar({ onMenuClick }) {
   const router = useRouter();
+  const pathname = usePathname();
   const dispatch = useDispatch();
   const searchValue = useSelector((state) => state.search.searchQuery);
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [githubMenuOpen, setGithubMenuOpen] = useState(false);
   const [isJoiningProject, setIsJoiningProject] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -72,6 +75,17 @@ export default function Topbar({ onMenuClick }) {
       setIsLoggingOut(false);
       setProfileMenuOpen(false);
     }
+  };
+
+  const handleGitHubConnect = () => {
+    const next = pathname || "/dashboard";
+    window.location.href = `/api/github/connect?mode=connect&next=${encodeURIComponent(next)}`;
+  };
+
+  const handleExternalNavigation = (url) => {
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
+    setGithubMenuOpen(false);
   };
 
     return(
@@ -198,12 +212,111 @@ export default function Topbar({ onMenuClick }) {
                     </div>
 
                     <NotificationBell />
+
+                    <div className="relative">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="relative rounded-full border border-[var(--border)] hover:bg-[#2F2F35] size-10 overflow-hidden"
+                        onClick={() => {
+                          setGithubMenuOpen((prev) => !prev);
+                          setProfileMenuOpen(false);
+                        }}
+                      >
+                        {userData?.github_connected && userData?.github_profile?.avatar_url ? (
+                          <Image
+                            src={userData.github_profile.avatar_url}
+                            alt="GitHub avatar"
+                            className="h-full w-full object-cover"
+                            width={40}
+                            height={40}
+                          />
+                        ) : (
+                          <FaGithub className="size-5" />
+                        )}
+                      </Button>
+
+                      {githubMenuOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setGithubMenuOpen(false)}
+                          />
+                          <div className="absolute right-0 top-12 z-50 w-72 rounded-lg bg-[#212126] border border-gray-700 shadow-lg overflow-hidden">
+                            {!userData?.github_connected ? (
+                              <div className="p-3">
+                                <p className="text-sm font-medium text-white">
+                                  Connect GitHub
+                                </p>
+                                <p className="mt-1 text-xs text-gray-400">
+                                  Link your GitHub account to browse repos and access GitHub actions from the app.
+                                </p>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="mt-3 w-full border-white/15 bg-transparent text-white hover:bg-[#2F2F35]"
+                                  onClick={handleGitHubConnect}
+                                >
+                                  <FaGithub className="size-4" />
+                                  Connect with GitHub
+                                </Button>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="px-4 py-3 border-b border-gray-700">
+                                  <div className="flex items-center gap-3">
+                                    <div className="size-10 overflow-hidden rounded-full border border-gray-600">
+                                      <Image
+                                        src={userData?.github_profile?.avatar_url || "/thumbnail.svg"}
+                                        alt="GitHub avatar"
+                                        className="h-full w-full object-cover"
+                                        width={40}
+                                        height={40}
+                                      />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-sm font-medium text-white">
+                                        {userData?.github_profile?.name || userData?.github_profile?.login || "GitHub"}
+                                      </p>
+                                      <p className="truncate text-xs text-gray-400">
+                                        @{userData?.github_profile?.login || "connected"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="p-2">
+                                  <button
+                                    type="button"
+                                    className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm text-white transition-colors hover:bg-[#2F2F35]"
+                                    onClick={() => handleExternalNavigation(userData?.github_profile?.repos_url)}
+                                  >
+                                    <span>View all repos</span>
+                                    <ExternalLink className="size-4 text-gray-400" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="mt-1 flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm text-white transition-colors hover:bg-[#2F2F35]"
+                                    onClick={() => handleExternalNavigation(userData?.github_profile?.settings_url)}
+                                  >
+                                    <span>GitHub settings</span>
+                                    <ExternalLink className="size-4 text-gray-400" />
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
                     
                     {/* Profile Menu */}
                     <div className="relative">
                       <div 
                         className="size-10 overflow-hidden rounded-full border border-gray-700 cursor-pointer hover:border-gray-500 transition-colors" 
-                        onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                        onClick={() => {
+                          setProfileMenuOpen(!profileMenuOpen);
+                          setGithubMenuOpen(false);
+                        }}
                       >
                         <Image 
                           src={userData?.avatar_url || "/thumbnail.svg"} 

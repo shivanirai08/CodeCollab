@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FcGoogle } from "react-icons/fc";
+import { FaGithub } from "react-icons/fa";
 import { toast } from "sonner";
 import { EyeClosed, Eye, Info } from "lucide-react";
 import Image from "next/image";
@@ -77,6 +78,10 @@ export default function SignupPage() {
 
   const handleGoogleLogin = async () => {
     window.location.href = "/api/oauth";
+  };
+
+  const handleGitHubLogin = async () => {
+    window.location.href = "/api/github/connect?mode=auth&next=/dashboard";
   };
 
   return (
@@ -266,14 +271,24 @@ export default function SignupPage() {
           <span className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleGoogleLogin}
-          className="w-full h-11 border-white/20 hover:bg-white/10 text-white flex items-center justify-center gap-2"
-        >
-          <FcGoogle className="size-5" /> Continue with Google
-        </Button>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleGoogleLogin}
+            className="h-11 border-white/20 hover:bg-white/10 text-white flex items-center justify-center gap-2"
+          >
+            <FcGoogle className="size-5" /> Continue with Google
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleGitHubLogin}
+            className="h-11 border-white/20 hover:bg-white/10 text-white flex items-center justify-center gap-2"
+          >
+            <FaGithub className="size-5" /> Continue with GitHub
+          </Button>
+        </div>
 
         <p className="text-center text-sm text-gray-400">
           Already have an account?{" "}
