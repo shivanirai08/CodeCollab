@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchGitHubProfile } from "@/lib/github";
 import { createClient } from "@/lib/supabase/server";
 
 // Disable static optimization for auth-dependent routes
@@ -91,7 +92,7 @@ export async function GET(req) {
 
     const { data, error } = await supabase
       .from("users")
-      .select("id, email, username, avatar_url")
+      .select("id, email, username, avatar_url, github_token")
       .eq("id", user.id)
       .single();
 
@@ -99,8 +100,19 @@ export async function GET(req) {
       return NextResponse.json({ user: null }, { status: 200 });
     }
 
+    const githubProfile = await fetchGitHubProfile(data.github_token);
+
     return NextResponse.json(
-      { user: data },
+      {
+        user: {
+          id: data.id,
+          email: data.email,
+          username: data.username,
+          avatar_url: data.avatar_url,
+          github_connected: Boolean(data.github_token),
+          github_profile: githubProfile,
+        },
+      },
       {
         status: 200,
         headers: {
