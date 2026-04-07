@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "cross-env NODE_OPTIONS='--no-deprecation' next dev",
-    "build": "cross-env NODE_OPTIONS='--no-deprecation' next build",
-    "start": "cross-env NODE_OPTIONS='--no-deprecation' next start",
+    "dev": "NODE_OPTIONS=--no-deprecation next dev",
+    "build": "NODE_OPTIONS=--no-deprecation next build",
+    "start": "NODE_OPTIONS=--no-deprecation next start",
     "lint": "eslint"
   },
   "dependencies": {
