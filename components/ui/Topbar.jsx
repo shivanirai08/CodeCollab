@@ -11,7 +11,6 @@ import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { setSearchQuery } from "@/store/SearchSlice";
-import { createProject } from "@/store/ProjectSlice";
 import NotificationBell from "@/components/ui/NotificationBell";
 
 export default function Topbar({ onMenuClick }) {
@@ -111,19 +110,29 @@ export default function Topbar({ onMenuClick }) {
     setIsImportingRepo(true);
 
     try {
-      const result = await dispatch(
-        createProject({
-          projectName: selectedRepo.name,
-          description: `Imported from ${selectedRepo.fullName}. Placeholder project created until GitHub clone backend is added.`,
-          visibility: selectedRepo.private ? "private" : "public",
-        })
-      ).unwrap();
+      const response = await fetch("/api/github/import", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          repo: selectedRepo,
+        }),
+      });
 
-      toast.success(`Imported "${selectedRepo.name}" as a project placeholder.`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to import repository.");
+      }
+
+      const result = data.project;
+      toast.success(`Imported "${selectedRepo.name}" into a new project.`);
       setIsGitHubModalOpen(false);
       router.push(`/project/${result.id}`);
     } catch (error) {
-      toast.error(error || "Failed to import repository.");
+      toast.error(error.message || "Failed to import repository.");
       console.error("GitHub import error:", error);
     } finally {
       setIsImportingRepo(false);

@@ -35,7 +35,7 @@ export default function GitHubImportModal({
             </div>
             <h2 className="text-xl font-semibold">Import from GitHub</h2>
             <p className="mt-1 text-sm text-gray-400">
-              Select a repository to create a project placeholder. Backend cloning will be added later.
+              Select a repository to create a project and copy its files into CodeCollab.
             </p>
           </div>
 
