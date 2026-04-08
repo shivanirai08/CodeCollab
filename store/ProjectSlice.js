@@ -11,6 +11,10 @@ const initialState = {
   owner: "",
   members: [],
   onlineUsers: [],
+  repository: null,
+  gitStatus: null,
+  gitStatusLoading: false,
+  gitStatusError: null,
   permissions: {
     canEdit: false,
     canView: false,
@@ -140,6 +144,28 @@ export const updateProjectVisibility = createAsyncThunk(
   }
 );
 
+export const fetchGitStatus = createAsyncThunk(
+  "project/fetchGitStatus",
+  async (projectid, { rejectWithValue }) => {
+    try {
+      const res = await fetch(`/api/project/${projectid}/git/status`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch git status");
+      }
+
+      return data;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 const projectSlice = createSlice({
   name: "project",
   initialState,
@@ -154,6 +180,10 @@ const projectSlice = createSlice({
       state.owner = "";
       state.members = [];
       state.onlineUsers = [];
+      state.repository = null;
+      state.gitStatus = null;
+      state.gitStatusLoading = false;
+      state.gitStatusError = null;
       state.permissions = {
         canEdit: false,
         canView: false,
@@ -258,6 +288,8 @@ const projectSlice = createSlice({
           state.owner_id = project.owner_id;
         }
 
+        state.repository = action.payload.repository || null;
+
         if (permissions) {
           state.permissions = permissions;
         }
@@ -278,6 +310,8 @@ const projectSlice = createSlice({
           isCollaborator: false,
           isViewer: false,
         };
+        state.repository = null;
+        state.gitStatus = null;
         state.accessRequest = null;
         state.accessState = "not_joined";
       })
@@ -308,6 +342,19 @@ const projectSlice = createSlice({
       .addCase(updateProjectVisibility.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.payload;
+      })
+      .addCase(fetchGitStatus.pending, (state) => {
+        state.gitStatusLoading = true;
+        state.gitStatusError = null;
+      })
+      .addCase(fetchGitStatus.fulfilled, (state, action) => {
+        state.gitStatusLoading = false;
+        state.gitStatus = action.payload;
+        state.gitStatusError = null;
+      })
+      .addCase(fetchGitStatus.rejected, (state, action) => {
+        state.gitStatusLoading = false;
+        state.gitStatusError = action.payload || "Failed to fetch git status";
       });
   },
 });

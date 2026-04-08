@@ -28,6 +28,7 @@ export default function FolderItem({
   renamingNode,
   onRenameNode,
   onCancelRename,
+  gitStatusByNodeId,
 }) {
   const handleToggle = (e) => {
     e.stopPropagation()
@@ -116,6 +117,11 @@ export default function FolderItem({
                 onCreateNode={onCreateNode}
                 onCancelCreate={onCancelCreate}
                 openFolders={openFolders}
+                canEdit={canEdit}
+                renamingNode={renamingNode}
+                onRenameNode={onRenameNode}
+                onCancelRename={onCancelRename}
+                gitStatusByNodeId={gitStatusByNodeId}
               />
             ) : (
               <FileItem
@@ -125,6 +131,7 @@ export default function FolderItem({
                 active={child.id === activeFileId}
                 onClick={() => onFileClick(child.id)}
                 onContextMenu={onContextMenu}
+                gitStatus={gitStatusByNodeId?.[child.id] || null}
               />
             )
           )}

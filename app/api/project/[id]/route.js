@@ -6,6 +6,7 @@ import {
   JOIN_REQUEST_STATUS,
   normalizeAccessType,
 } from "@/lib/projectAccess";
+import { getProjectRepository, normalizeRepository } from "@/lib/projectRepository";
 
 export async function GET(req, { params: paramsPromise }) {
   try {
@@ -56,6 +57,8 @@ export async function GET(req, { params: paramsPromise }) {
       }
     }
 
+    const repository = await getProjectRepository(id).catch(() => null);
+
     return NextResponse.json({
       project: {
         projectid: context.project.id,
@@ -73,6 +76,7 @@ export async function GET(req, { params: paramsPromise }) {
         isCollaborator: context.permissions.isCollaborator,
         isViewer: context.permissions.isViewer,
       },
+      repository: normalizeRepository(repository),
       accessRequest: latestRequest,
       accessState: context.permissions.isMember
         ? "member"

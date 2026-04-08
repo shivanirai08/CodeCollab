@@ -7,7 +7,27 @@ import {
   HiOutlineCode,
 } from "react-icons/hi"
 
-export default function FileItem({ file, collapsed, active, onClick, onContextMenu }) {
+const statusLabelMap = {
+  untracked: "U",
+  conflicted: "C",
+}
+
+const statusClassMap = {
+  M: "text-amber-400",
+  A: "text-emerald-400",
+  D: "text-red-400",
+  R: "text-sky-400",
+  U: "text-violet-400",
+  C: "text-red-500",
+}
+
+function getStatusLabel(gitStatus) {
+  if (!gitStatus) return null
+  if (statusLabelMap[gitStatus]) return statusLabelMap[gitStatus]
+  return gitStatus.replace(/\s+/g, "").charAt(0) || null
+}
+
+export default function FileItem({ file, collapsed, active, onClick, onContextMenu, gitStatus }) {
   const getFileIcon = () => {
     const name = file.name.toLowerCase()
     if (name.endsWith(".c") || name.endsWith(".cpp") || name.endsWith(".java") || name.endsWith(".py")) {
@@ -24,6 +44,9 @@ export default function FileItem({ file, collapsed, active, onClick, onContextMe
     return <HiOutlineDocumentText size={16} className="text-gray-400" />
   }
 
+  const statusLabel = getStatusLabel(gitStatus)
+  const statusClass = statusLabel ? statusClassMap[statusLabel] || "text-[#8D8D98]" : ""
+
   return (
     <div
       className={cn(
@@ -34,7 +57,12 @@ export default function FileItem({ file, collapsed, active, onClick, onContextMe
       onContextMenu={(e) => onContextMenu(e, file.id)}
     >
       {getFileIcon()}
-      {!collapsed && <span className="truncate">{file.name}</span>}
+      {!collapsed && <span className="truncate flex-1">{file.name}</span>}
+      {!collapsed && statusLabel && (
+        <span className={cn("text-[10px] font-semibold uppercase", statusClass)}>
+          {statusLabel}
+        </span>
+      )}
     </div>
   )
 }

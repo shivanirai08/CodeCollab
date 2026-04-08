@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { FiMessageSquare } from "react-icons/fi";
 import { useState, useMemo, useEffect } from "react";
 import SharePanel from "./SharePanel";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import OnlineAvatars from "./OnlineAvatars";
 import VoiceCall from "./VoiceCall";
@@ -12,6 +12,9 @@ import useVoiceCall from "@/hooks/useVoiceCall";
 import useNotifications from "@/hooks/useNotifications";
 import NotificationBell from "@/components/ui/NotificationBell";
 import { toast } from "sonner";
+import GitPanel from "./GitPanel";
+import { GitBranch, Github, RefreshCw } from "lucide-react";
+import { fetchGitStatus } from "@/store/ProjectSlice";
 
 
 export default function TopBar({
@@ -20,12 +23,17 @@ export default function TopBar({
   onMenuClick,
   hasUnreadChat = false,
 }) {
+  const dispatch = useDispatch();
   const project = useSelector((state) => state.project);
   const onlineUsers = useSelector((state) => state.project.onlineUsers);
   const reduxUserId = useSelector((state) => state.user.id);
   const permissions = useSelector((state) => state.project.permissions);
   const accessState = useSelector((state) => state.project.accessState);
+  const repository = useSelector((state) => state.project.repository);
+  const gitStatus = useSelector((state) => state.project.gitStatus);
+  const gitStatusLoading = useSelector((state) => state.project.gitStatusLoading);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isGitPanelOpen, setIsGitPanelOpen] = useState(false);
   const [isRequestingAccess, setIsRequestingAccess] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -212,7 +220,16 @@ export default function TopBar({
     }
   };
 
+  const handleRefreshGitStatus = async () => {
+    try {
+      await dispatch(fetchGitStatus(projectId)).unwrap();
+    } catch (error) {
+      toast.error(error || "Failed to refresh git status");
+    }
+  };
+
   return (
+    <>
     <div className="flex items-center justify-between px-3 md:px-4 pt-4 md:pt-6 pb-2">
       {/* Left: Hamburger + Project Name */}
       <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
@@ -227,8 +244,27 @@ export default function TopBar({
         </button>
 
         {/* Project Name */}
-        <div className="text-base md:text-xl font-semibold text-[var(--foreground)] truncate">
-          {project.projectname}
+        <div className="min-w-0">
+          <div className="text-base md:text-xl font-semibold text-[var(--foreground)] truncate">
+            {project.projectname}
+          </div>
+          {repository && (
+            <button
+              type="button"
+              onClick={() => setIsGitPanelOpen(true)}
+              className="mt-1 flex max-w-full items-center gap-2 rounded-full border border-[#2B2B30] bg-[#17171D] px-3 py-1 text-xs text-gray-300 transition-colors hover:border-[#3A3A42] hover:text-white"
+            >
+              <Github className="size-3.5 shrink-0" />
+              <span className="truncate">{repository.repoFullName}</span>
+              <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5">
+                <GitBranch className="size-3" />
+                {repository.currentBranch}
+              </span>
+              <span className="hidden md:inline-flex rounded-full bg-white/5 px-2 py-0.5">
+                {gitStatus?.isClean ? "Clean" : "Dirty"}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -259,6 +295,19 @@ export default function TopBar({
           emptyMessage="No notifications for this project yet"
         />
 
+        {repository && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="border border-[#2B2B30] bg-[#17171D] text-gray-200 hover:bg-[#202027] hover:text-white"
+            onClick={handleRefreshGitStatus}
+            disabled={gitStatusLoading}
+            title="Refresh Git Status"
+          >
+            <RefreshCw className={`size-4 ${gitStatusLoading ? "animate-spin" : ""}`} />
+          </Button>
+        )}
+
         {/* Chat Button */}
         <Button
           onClick={onToggleChat}
@@ -281,5 +330,11 @@ export default function TopBar({
         />
       )}
     </div>
+    <GitPanel
+      projectId={projectId}
+      isOpen={isGitPanelOpen}
+      onClose={() => setIsGitPanelOpen(false)}
+    />
+    </>
   );
 }

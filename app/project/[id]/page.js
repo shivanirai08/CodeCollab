@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchProject, memberProject, clearProject } from "@/store/ProjectSlice";
+import { fetchProject, memberProject, clearProject, fetchGitStatus } from "@/store/ProjectSlice";
 import { fetchNodes } from "@/store/NodesSlice";
 import { fetchUserInfo } from "@/store/UserSlice";
 import { cn } from "@/lib/utils";
@@ -108,6 +108,9 @@ export default function ProjectWorkspacePage() {
           } else {
             dispatch(memberProject(projectId));
             dispatch(fetchNodes(projectId));
+            if (data.repository) {
+              dispatch(fetchGitStatus(projectId));
+            }
             // Enable real-time subscriptions after successful project load
             setRealtimeEnabled(true);
           }
@@ -255,6 +258,5 @@ export default function ProjectWorkspacePage() {
     </div>
   );
 }
-
 
 

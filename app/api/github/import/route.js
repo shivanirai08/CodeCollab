@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getInternalBackendHeaders } from "@/lib/projectRepository";
 
 const backendUrl =
   process.env.CODECOLLAB_BACKEND_URL ||
@@ -33,6 +34,10 @@ async function cleanupImportedProject(admin, projectId) {
 
   try {
     await admin.from("project_members").delete().eq("project_id", projectId);
+  } catch {}
+
+  try {
+    await admin.from("project_repositories").delete().eq("project_id", projectId);
   } catch {}
 
   try {
@@ -108,24 +113,18 @@ export async function POST(req) {
       );
     }
 
-    const headers = {
-      "Content-Type": "application/json",
-    };
-
-    if (process.env.CODECOLLAB_INTERNAL_SECRET) {
-      headers["x-codecollab-internal-secret"] =
-        process.env.CODECOLLAB_INTERNAL_SECRET;
-    }
-
     const importResponse = await fetch(`${backendUrl}/github/import`, {
       method: "POST",
-      headers,
+      headers: getInternalBackendHeaders(),
       body: JSON.stringify({
         projectId: project.id,
+        userId: user.id,
         githubToken: userData.github_token,
         repo: {
+          githubRepoId: repo.id || null,
           name: repo.name,
           fullName: repo.fullName,
+          repoUrl: repo.htmlUrl || null,
           private: Boolean(repo.private),
           defaultBranch: repo.defaultBranch || null,
           cloneUrl: repo.cloneUrl || null,
