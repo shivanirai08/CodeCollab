@@ -145,7 +145,7 @@ export const updateNode = createAsyncThunk(
 // Update file content (debounced save)
 export const updateFileContent = createAsyncThunk(
   "nodes/updateFileContent",
-  async ({ nodeId, content, projectId }, { rejectWithValue }) => {
+  async ({ nodeId, content, projectId }, { rejectWithValue, dispatch }) => {
     try {
       const res = await fetch(`/api/project/nodes/${nodeId}`, {
         method: "PATCH",

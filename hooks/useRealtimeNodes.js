@@ -6,6 +6,7 @@ import {
   handleRemoteNodeUpdate,
   handleRemoteNodeDelete,
 } from '@/store/NodesSlice';
+import { fetchGitStatus } from '@/store/ProjectSlice';
 
 /**
  * Custom hook for real-time file/folder structure synchronization
@@ -19,6 +20,7 @@ export const useRealtimeNodes = (projectId, enabled = true, currentUserId = null
   const dispatch = useDispatch();
   const realtimeService = useRef(null);
   const unsubscribeRef = useRef(null);
+  const refreshTimeoutRef = useRef(null);
 
   /**
    * Main effect: Subscribes to real-time node (file/folder) changes
@@ -38,15 +40,27 @@ export const useRealtimeNodes = (projectId, enabled = true, currentUserId = null
     }
 
     // Subscribe to nodes table changes
+    const scheduleGitStatusRefresh = () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+
+      refreshTimeoutRef.current = setTimeout(() => {
+        dispatch(fetchGitStatus(projectId));
+      }, 500);
+    };
+
     const unsubscribe = realtimeService.current.subscribeToNodes(projectId, {
       onInsert: (newNode) => {
         // Update Redux store with the newly created node
         dispatch(handleRemoteNodeInsert(newNode));
+        scheduleGitStatusRefresh();
       },
 
       onUpdate: (updatedNode, oldNode) => {
         // Update Redux store with modified node (rename or content change)
         dispatch(handleRemoteNodeUpdate(updatedNode));
+        scheduleGitStatusRefresh();
       },
 
       onDelete: (deletedNode) => {
@@ -56,6 +70,7 @@ export const useRealtimeNodes = (projectId, enabled = true, currentUserId = null
 
         // Remove node from Redux store
         dispatch(handleRemoteNodeDelete(deletedNode));
+        scheduleGitStatusRefresh();
       },
     });
 
@@ -66,6 +81,10 @@ export const useRealtimeNodes = (projectId, enabled = true, currentUserId = null
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;
+      }
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
       }
     };
   }, [projectId, enabled, dispatch, currentUserId]);
