@@ -1,24 +1,31 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button";
-import { FiMessageSquare } from "react-icons/fi";
-import { useState, useMemo, useEffect } from "react";
-import SharePanel from "./SharePanel";
+import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import SharePanel from "./SharePanel";
 import OnlineAvatars from "./OnlineAvatars";
 import VoiceCall from "./VoiceCall";
 import useVoiceCall from "@/hooks/useVoiceCall";
 import useNotifications from "@/hooks/useNotifications";
 import NotificationBell from "@/components/ui/NotificationBell";
 import { toast } from "sonner";
-import GitPanel from "./GitPanel";
-import { GitBranch, Github } from "lucide-react";
-
+import {
+  GitBranch,
+  Github,
+  Menu,
+  MessageSquare,
+  SquareTerminal,
+} from "lucide-react";
 
 export default function TopBar({
+  onToggleGit,
+  isGitOpen,
   onToggleChat,
   isChatOpen,
+  onToggleTerminal,
+  isTerminalOpen,
   onMenuClick,
   hasUnreadChat = false,
 }) {
@@ -30,7 +37,6 @@ export default function TopBar({
   const repository = useSelector((state) => state.project.repository);
   const gitStatus = useSelector((state) => state.project.gitStatus);
   const [isShareOpen, setIsShareOpen] = useState(false);
-  const [isGitPanelOpen, setIsGitPanelOpen] = useState(false);
   const [isRequestingAccess, setIsRequestingAccess] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -40,7 +46,6 @@ export default function TopBar({
     searchParams.get("panel") === "share" && permissions.isMember;
   const { notifications } = useNotifications();
 
-  // Real voice call hook — connects WebSocket + WebRTC SFU
   const {
     isUserInCall,
     isMuted,
@@ -55,16 +60,12 @@ export default function TopBar({
     getRoomInfo,
   } = useVoiceCall(projectId);
 
-  // Expose debug functions to window for console access
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       window.voiceCallDebug = {
         getRoomInfo,
         roomId: voiceRoomId,
       };
-      console.log('[TopBar] 🐛 Voice call debug functions available:');
-      console.log('  window.voiceCallDebug.getRoomInfo() - Get current room info');
-      console.log('  window.voiceCallDebug.roomId - Current room ID');
     }
   }, [getRoomInfo, voiceRoomId]);
 
@@ -74,7 +75,6 @@ export default function TopBar({
     }
   }, [shouldOpenShareFromNotification]);
 
-  // Prefer Redux user ID for stable identity across WS/presence sources.
   const currentUserId = reduxUserId || voiceUserId || "current-user";
   const projectJoinRequestAlertCount = useMemo(() => {
     if (!permissions.isOwner) return 0;
@@ -97,23 +97,21 @@ export default function TopBar({
     return true;
   };
 
-  // Enrich voice participants with actual user data from online presence
   const enrichedParticipants = useMemo(() => {
-    return participants.map((p) => {
-      const onlineUser = onlineUsers.find((u) => u.user_id === p.user_id);
-      
-      // Get the best available username
-      let displayName = p.username;
+    return participants.map((participant) => {
+      const onlineUser = onlineUsers.find((user) => user.user_id === participant.user_id);
+
+      let displayName = participant.username;
       if (isValidDisplayName(onlineUser?.username)) {
         displayName = onlineUser.username;
-      } else if (!isValidDisplayName(p.username)) {
-        displayName = onlineUser?.username || p.username;
+      } else if (!isValidDisplayName(participant.username)) {
+        displayName = onlineUser?.username || participant.username;
       }
-      
+
       return {
-        ...p,
+        ...participant,
         username: displayName,
-        avatar_url: onlineUser?.avatar_url || p.avatar_url,
+        avatar_url: onlineUser?.avatar_url || participant.avatar_url,
       };
     });
   }, [participants, onlineUsers]);
@@ -151,16 +149,16 @@ export default function TopBar({
     if (permissions.isMember) {
       return (
         <Button
-          className="bg-gradient-to-b from-[#FFF] to-[#6B696D] px-3 md:px-6 py-2 text-sm md:text-base h-9 md:h-10"
+          className="h-9 bg-gradient-to-b from-[#FFF] to-[#6B696D] px-3 py-2 text-sm text-black md:h-10 md:px-6"
           onClick={() => setIsShareOpen(true)}
         >
           <span className="hidden sm:inline">Share</span>
           <span className="sm:hidden">S</span>
-          {/* {projectJoinRequestAlertCount > 0 && (
+          {projectJoinRequestAlertCount > 0 ? (
             <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-black/80 px-1.5 py-0.5 text-[10px] font-semibold text-white">
               {projectJoinRequestAlertCount}
             </span>
-          )} */}
+          ) : null}
         </Button>
       );
     }
@@ -169,7 +167,7 @@ export default function TopBar({
       return (
         <Button
           disabled
-          className="bg-[#2B2B30] text-gray-300 px-3 md:px-6 py-2 text-sm md:text-base h-9 md:h-10"
+          className="h-9 bg-[#2B2B30] px-3 py-2 text-sm text-gray-300 md:h-10 md:px-6"
         >
           Request Sent
         </Button>
@@ -179,7 +177,7 @@ export default function TopBar({
     if (accessState === "approved") {
       return (
         <Button
-          className="bg-gradient-to-b from-[#FFF] to-[#6B696D] px-3 md:px-6 py-2 text-sm md:text-base h-9 md:h-10 text-black"
+          className="h-9 bg-gradient-to-b from-[#FFF] to-[#6B696D] px-3 py-2 text-sm text-black md:h-10 md:px-6"
           onClick={() => window.location.reload()}
         >
           Enter Project
@@ -191,7 +189,7 @@ export default function TopBar({
       return (
         <Button
           disabled
-          className="bg-red-500/10 text-red-300 px-3 md:px-6 py-2 text-sm md:text-base h-9 md:h-10"
+          className="h-9 bg-red-500/10 px-3 py-2 text-sm text-red-300 md:h-10 md:px-6"
         >
           Request Denied
         </Button>
@@ -200,7 +198,7 @@ export default function TopBar({
 
     return (
       <Button
-        className="bg-gradient-to-b from-[#FFF] to-[#6B696D] px-3 md:px-6 py-2 text-sm md:text-base h-9 md:h-10 text-black"
+        className="h-9 bg-gradient-to-b from-[#FFF] to-[#6B696D] px-3 py-2 text-sm text-black md:h-10 md:px-6"
         onClick={handleRequestAccess}
         disabled={isRequestingAccess}
       >
@@ -217,100 +215,118 @@ export default function TopBar({
     }
   };
 
+  const topButtonClass = (active) =>
+    `relative inline-flex h-9 items-center gap-2 rounded-full border px-3 text-sm transition-colors md:h-10 ${
+      active
+        ? "border-[#3A3A42] bg-[#1A1A20] text-white"
+        : "border-[#2B2B30] bg-transparent text-[#C9C9D6] hover:border-[#3A3A42] hover:bg-[#17171D] hover:text-white"
+    }`;
+
   return (
     <>
-    <div className="flex items-center justify-between px-3 md:px-4 pt-4 md:pt-6 pb-2">
-      {/* Left: Hamburger + Project Name */}
-      <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
-        {/* Mobile hamburger for file sidebar */}
-        <button
-          className="lg:hidden p-2 rounded-lg bg-[#212126] hover:bg-[#2F2F35] shrink-0"
-          onClick={onMenuClick}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
+      <div className="flex items-center justify-between border-b border-[#24242A] px-3 pb-3 pt-4 md:px-4 md:pt-5">
+        <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-3">
+          <button
+            className="rounded-lg bg-[#212126] p-2 hover:bg-[#2F2F35] lg:hidden"
+            onClick={onMenuClick}
+            aria-label="Open file tree"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
 
-        {/* Project Name */}
-        <div className="min-w-0">
-          <div className="text-base md:text-xl font-semibold text-[var(--foreground)] truncate">
-            {project.projectname}
+          <div className="min-w-0">
+            <div className="truncate text-base font-semibold text-[var(--foreground)] md:text-xl">
+              {project.projectname}
+            </div>
+            <div className="mt-1 flex max-w-full items-center gap-2 text-xs text-[#8B909A]">
+              {repository ? (
+                <>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[#2B2B30] bg-[#17171D] px-2 py-1">
+                    <Github className="size-3" />
+                    <span className="truncate">{repository.repoFullName}</span>
+                  </span>
+                  <span className="hidden items-center gap-1 sm:inline-flex">
+                    <GitBranch className="size-3" />
+                    {repository.currentBranch}
+                  </span>
+                  <span className="hidden md:inline">{gitStatus?.isClean ? "Clean working tree" : "Uncommitted changes"}</span>
+                </>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-[#2B2B30] bg-[#141419] px-2 py-1">
+                  <Github className="size-3" />
+                  No Git repository connected
+                </span>
+              )}
+            </div>
           </div>
-          {repository && (
-            <button
-              type="button"
-              onClick={() => setIsGitPanelOpen(true)}
-              className="mt-1 flex max-w-full items-center gap-2 rounded-full border border-[#2B2B30] bg-[#17171D] px-3 py-1 text-xs text-gray-300 transition-colors hover:border-[#3A3A42] hover:text-white"
-            >
-              <Github className="size-3.5 shrink-0" />
-              <span className="truncate">{repository.repoFullName}</span>
-              <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5">
-                <GitBranch className="size-3" />
-                {repository.currentBranch}
-              </span>
-              <span className="hidden md:inline-flex rounded-full bg-white/5 px-2 py-0.5">
-                {gitStatus?.isClean ? "Clean" : "Dirty"}
-              </span>
-            </button>
-          )}
+        </div>
+
+        <div className="hidden items-center gap-2 lg:flex">
+          <div className="hidden xl:block">
+            <OnlineAvatars onlineUsers={onlineUsers} />
+          </div>
+
+          <VoiceCall
+            currentUserId={currentUserId}
+            onlineUsers={onlineUsers}
+            participantsInCall={enrichedParticipants}
+            isUserInCall={isUserInCall}
+            isMuted={isMuted}
+            connectionState={connectionState}
+            connectionError={connectionError}
+            onJoinCall={joinCall}
+            onLeaveCall={leaveCall}
+            onToggleMute={toggleMute}
+          />
+
+          <NotificationBell
+            projectId={projectId}
+            title="Project Notifications"
+            emptyMessage="No notifications for this project yet"
+          />
+
+          <button type="button" onClick={onToggleGit} className={topButtonClass(isGitOpen)}>
+            <Github className="h-4 w-4" />
+            Git
+          </button>
+
+          <button type="button" onClick={onToggleChat} className={topButtonClass(isChatOpen)}>
+            {hasUnreadChat && !isChatOpen ? (
+              <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-red-500" />
+            ) : null}
+            <MessageSquare className="h-4 w-4" />
+            Chat
+          </button>
+
+          {renderAccessButton()}
         </div>
       </div>
 
-      {/* Right Side: Avatars, Voice Call, Chat Icon, Share Button */}
-      <div className="flex items-center gap-2 md:gap-3">
-        {/* Online Users Avatars - Hidden on small screens */}
-        <div className="hidden sm:block">
-          <OnlineAvatars onlineUsers={onlineUsers} />
-        </div>
-
-        {/* Voice Call Component - Between Avatars and Chat */}
-        <VoiceCall
-          currentUserId={currentUserId}
-          onlineUsers={onlineUsers}
-          participantsInCall={enrichedParticipants}
-          isUserInCall={isUserInCall}
-          isMuted={isMuted}
-          connectionState={connectionState}
-          connectionError={connectionError}
-          onJoinCall={joinCall}
-          onLeaveCall={leaveCall}
-          onToggleMute={toggleMute}
-        />
-
-        <NotificationBell
-          projectId={projectId}
-          title="Project Notifications"
-          emptyMessage="No notifications for this project yet"
-        />
-
-        {/* Chat Button */}
-        <Button
-          onClick={onToggleChat}
-          className={`relative rounded-full border border-[var(--border)] bg-transparent text-white hover:bg-[var(--accent)] w-9 h-9 md:w-10 md:h-10 p-0 ${isChatOpen ? "bg-[var(--secondary)]" : ""
-            }`}
-        >
-          {hasUnreadChat && !isChatOpen && (
-            <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-red-500" />
-          )}
-          <FiMessageSquare className="h-4 w-4 md:h-5 md:w-5" />
-        </Button>
-
-        {renderAccessButton()}
+      <div className="flex items-center gap-2 border-b border-[#24242A] px-3 py-2 lg:hidden">
+        <button type="button" onClick={onToggleGit} className={topButtonClass(isGitOpen)}>
+          <Github className="h-4 w-4" />
+          Git
+        </button>
+        <button type="button" onClick={onToggleChat} className={topButtonClass(isChatOpen)}>
+          {hasUnreadChat && !isChatOpen ? (
+            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" />
+          ) : null}
+          <MessageSquare className="h-4 w-4" />
+          Chat
+        </button>
+        <button type="button" onClick={onToggleTerminal} className={topButtonClass(isTerminalOpen)}>
+          <SquareTerminal className="h-4 w-4" />
+          Terminal
+        </button>
+        <div className="ml-auto">{renderAccessButton()}</div>
       </div>
 
-      {permissions.isMember && (
+      {permissions.isMember ? (
         <SharePanel
           isOpen={isShareOpen}
           onClose={handleCloseShare}
         />
-      )}
-    </div>
-    <GitPanel
-      projectId={projectId}
-      isOpen={isGitPanelOpen}
-      onClose={() => setIsGitPanelOpen(false)}
-    />
+      ) : null}
     </>
   );
 }

@@ -19,7 +19,7 @@ import InlineInput from "./InlineInput";
 import ContextMenu from "./ContextMenu";
 import { toast } from "sonner";
 
-export default function FileSidebar({ className, mobileOpen, onClose }) {
+export default function FileSidebar({ className, mobileOpen, onClose, desktopWidth }) {
   const dispatch = useDispatch();
   const params = useParams();
   const projectId = params.id;
@@ -297,6 +297,7 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
           mobileOpen ? "flex w-64" : "hidden",
           className
         )}
+        style={!mobileOpen && !collapsed && desktopWidth ? { width: `${desktopWidth}px` } : undefined}
       >
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 pt-8 pb-6 relative" onClick={() => router.push("/")}>
