@@ -60,28 +60,6 @@ export async function POST(req, { params: paramsPromise }) {
       );
     }
 
-    const { count: nodeCount, error: nodesError } = await admin
-      .from("nodes")
-      .select("id", { count: "exact", head: true })
-      .eq("project_id", id);
-
-    if (nodesError) {
-      return NextResponse.json(
-        { error: nodesError.message || "Failed to inspect current workspace." },
-        { status: 500 }
-      );
-    }
-
-    if ((nodeCount || 0) > 0) {
-      return NextResponse.json(
-        {
-          error:
-            "This project already has files. Safe repo import is only enabled for empty projects right now.",
-        },
-        { status: 409 }
-      );
-    }
-
     const body = await req.json();
     const repo = body?.repo;
 

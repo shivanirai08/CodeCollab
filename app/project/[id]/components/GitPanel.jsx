@@ -15,6 +15,7 @@ import {
   FolderGit2,
   GitBranch,
   Github,
+  Info,
   Loader2,
   RefreshCw,
   Sparkles,
@@ -140,8 +141,8 @@ export default function GitPanel({
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedRepoId, setSelectedRepoId] = useState(null);
   const [isImportingRepo, setIsImportingRepo] = useState(false);
+  const [showFlowInfo, setShowFlowInfo] = useState(false);
 
-  const workspaceHasFiles = nodes.some((node) => node.type === "file");
   const files = useMemo(() => gitStatus?.files || [], [gitStatus]);
   const stagedFiles = files.filter((file) => file.staged);
   const unstagedFiles = files.filter((file) => file.unstaged || !file.staged);
@@ -370,86 +371,79 @@ export default function GitPanel({
               <FolderGit2 className="size-3.5" />
               Git
             </div>
-            <h2 className="text-lg font-semibold text-white">Connect source control later</h2>
+            <h2 className="text-lg font-semibold text-white">Connect source control</h2>
             <p className="mt-1 text-sm text-[#8B909A]">
-              This project can stay local-first. When you are ready, connect GitHub and import a repository into this workspace.
+              Keep this simple: connect GitHub, then import your repository when ready.
             </p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-[#A3A8B3] hover:bg-[#1A1A20] hover:text-white"
-            onClick={onClose}
-          >
-            <X className="size-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-[#A3A8B3] hover:bg-[#1A1A20] hover:text-white"
+              onClick={() => setShowFlowInfo((prev) => !prev)}
+              aria-label="Show Git setup flow"
+            >
+              <Info className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-[#A3A8B3] hover:bg-[#1A1A20] hover:text-white"
+              onClick={onClose}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        {showFlowInfo ? (
+          <div className="rounded-xl border border-[#2B2B30] bg-[#101014] p-3 text-sm text-[#C7CBD4]">
+            <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-[#7C8392]">Flow</div>
+            <div>1. Connect your GitHub account.</div>
+            <div>2. Pick a repository to import into this project.</div>
+            <div>3. Continue using commit, push, and pull inside this panel.</div>
+          </div>
+        ) : null}
+
         <div className="rounded-2xl border border-[#24242A] bg-[#111117] p-4">
           <div className="flex items-start gap-3">
             <div className="rounded-2xl bg-white/5 p-3 text-white">
               <Github className="size-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-semibold text-white">Git account connection</h3>
+              <h3 className="text-sm font-semibold text-white">
+                {githubConnected ? "GitHub connected" : "GitHub not connected"}
+              </h3>
               <p className="mt-1 text-sm text-[#8B909A]">
                 {githubConnected
-                  ? "GitHub is connected for this account. You can import a repository into this project."
-                  : "Connect GitHub now, or keep coding without it and return here later."}
+                  ? "Import a repository to connect this project to source control."
+                  : "Connect your GitHub account to start importing repositories."}
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-2">
+                {githubConnected ? (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setIsImportModalOpen(true)}
+                    disabled={!permissions.canEdit || isLoadingRepos}
+                    className="border border-[#2B2B30] bg-[#17171D] text-white hover:bg-[#202027]"
+                  >
+                    {isLoadingRepos ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                    Import a Repo
+                  </Button>
+                ) : (
                 <Button
                   onClick={handleConnectGitHub}
                   disabled={!permissions.canEdit}
                   className="bg-white text-black hover:bg-white/90"
                 >
                   <Github className="size-4" />
-                  {githubConnected ? "Reconnect GitHub" : "Connect GitHub"}
+                  Connect GitHub
                 </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => setIsImportModalOpen(true)}
-                  disabled={!permissions.canEdit || !githubConnected || workspaceHasFiles || isLoadingRepos}
-                  className="border border-[#2B2B30] bg-[#17171D] text-white hover:bg-[#202027]"
-                >
-                  {isLoadingRepos ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                  Import a Repo
-                </Button>
+                )}
               </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-3">
-          <div className="rounded-2xl border border-[#24242A] bg-[#111117] p-4">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-[#7C8392]">Flow</div>
-            <div className="mt-3 space-y-3 text-sm text-[#C7CBD4]">
-              <div>1. Keep coding with the current workspace even without Git.</div>
-              <div>2. Return to this panel later and connect your GitHub account.</div>
-              <div>3. Import a repository when the project is ready for source control.</div>
-              {!permissions.canEdit ? (
-                <div className="text-[#F4B740]">
-                  This project is view-only for you, so Git connection actions are disabled.
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-dashed border-[#2B2B30] bg-[#101014] p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-white">Current project readiness</div>
-                <p className="mt-1 text-sm text-[#8B909A]">
-                  {workspaceHasFiles
-                    ? "This workspace already has files. Safe attach-later import for non-empty projects is not implemented yet, so repo import stays disabled here."
-                    : "This workspace is empty, so importing a GitHub repository can populate it directly."}
-                </p>
-              </div>
-              <span className="rounded-full border border-[#2B2B30] bg-[#17171D] px-2 py-1 text-[11px] text-[#C7CBD4]">
-                {workspaceHasFiles ? "Non-empty workspace" : "Ready to import"}
-              </span>
             </div>
           </div>
         </div>
