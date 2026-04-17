@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createGitErrorResponse } from "@/lib/gitActionErrors";
 import { ensureProjectAccess } from "@/lib/projectAccess";
 import { getInternalBackendHeaders } from "@/lib/projectRepository";
 
@@ -50,17 +51,13 @@ export async function GET(req, { params: paramsPromise }) {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      return NextResponse.json(
-        { error: result.error || "Failed to load file diff" },
-        { status: response.status || 500 }
-      );
+      const errorResponse = createGitErrorResponse(result, response.status || 500, "diff");
+      return NextResponse.json(errorResponse.body, { status: errorResponse.status });
     }
 
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || "Failed to load file diff" },
-      { status: 500 }
-    );
+    const errorResponse = createGitErrorResponse({ error: error.message }, 500, "diff");
+    return NextResponse.json(errorResponse.body, { status: errorResponse.status });
   }
 }

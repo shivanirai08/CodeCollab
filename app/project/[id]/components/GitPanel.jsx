@@ -5,6 +5,10 @@ import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import GitHubImportModal from "@/components/ui/GitHubImportModal";
+import {
+  getGitSuggestedActionLabel,
+  normalizeGitActionError,
+} from "@/lib/gitActionErrors";
 import { fetchGitStatus, fetchProject } from "@/store/ProjectSlice";
 import { fetchFileContent, fetchNodes, setActiveFile } from "@/store/NodesSlice";
 import {
@@ -63,11 +67,71 @@ function buildNodePathIndex(nodes) {
   return index;
 }
 
+// CONFLICT_MARKER_RE matches the three git conflict marker lines:
+//   <<<<<<< HEAD (or <<<<<<< branch-name)
+//   =======
+//   >>>>>>> incoming-branch
+const CONFLICT_MARKER_RE = /^(<{7}|={7}|>{7})(\s.*)?$/;
+
+/**
+ * parseConflictContent(rawText)
+ * Used when the file is unmerged.  The backend returns the working-tree file
+ * directly (no unified-diff header).  We walk every line and tag it:
+ *   conflict-ours-header   – the <<<<<<< line
+ *   conflict-ours          – "Current Change" section (between <<<< and ====)
+ *   conflict-separator     – the ======= line
+ *   conflict-theirs        – "Incoming Change" section (between ==== and >>>>)
+ *   conflict-theirs-header – the >>>>>>> line
+ *   context                – everything outside a conflict block
+ */
+function parseConflictContent(rawText) {
+  const lines = String(rawText || "").split("\n");
+  const output = [];
+  let section = null; // null | "ours" | "theirs"
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith("<<<<<<<")) {
+      section = "ours";
+      output.push({ type: "conflict-ours-header", text: line, lineNo: i + 1 });
+      continue;
+    }
+    if (line.startsWith("=======")) {
+      section = "theirs";
+      output.push({ type: "conflict-separator", text: line, lineNo: i + 1 });
+      continue;
+    }
+    if (line.startsWith(">>>>>>>")) {
+      section = null;
+      output.push({ type: "conflict-theirs-header", text: line, lineNo: i + 1 });
+      continue;
+    }
+    if (section === "ours") {
+      output.push({ type: "conflict-ours", text: line, lineNo: i + 1 });
+      continue;
+    }
+    if (section === "theirs") {
+      output.push({ type: "conflict-theirs", text: line, lineNo: i + 1 });
+      continue;
+    }
+    output.push({ type: "context", oldLine: i + 1, newLine: i + 1, text: line });
+  }
+
+  return output;
+}
+
+/**
+ * parseUnifiedDiff(diffText)
+ * Standard unified-diff parser.  When conflict-marker lines happen to appear
+ * inside the diff (e.g. in context lines), we preserve them with their
+ * conflict type so the viewer can style them correctly.
+ */
 function parseUnifiedDiff(diffText) {
   const lines = String(diffText || "").split("\n");
   const output = [];
   let oldLine = 0;
   let newLine = 0;
+  let conflictSection = null;
 
   for (const line of lines) {
     if (line.startsWith("@@")) {
@@ -76,6 +140,8 @@ function parseUnifiedDiff(diffText) {
         oldLine = Number(match[1]);
         newLine = Number(match[2]);
       }
+      // A hunk header resets any in-progress conflict tracking.
+      conflictSection = null;
       output.push({ type: "hunk", text: line });
       continue;
     }
@@ -90,20 +156,52 @@ function parseUnifiedDiff(diffText) {
       continue;
     }
 
+    // Strip the leading diff prefix (+/-/ ) before testing for markers
+    const bare = line.startsWith("+") || line.startsWith("-") || line.startsWith(" ")
+      ? line.slice(1)
+      : line;
+
+    if (bare.startsWith("<<<<<<<")) {
+      conflictSection = "ours";
+      output.push({ type: "conflict-ours-header", text: bare, oldLine, newLine });
+      if (!line.startsWith("-")) newLine += 1;
+      if (!line.startsWith("+")) oldLine += 1;
+      continue;
+    }
+    if (bare.startsWith("=======") && conflictSection) {
+      conflictSection = "theirs";
+      output.push({ type: "conflict-separator", text: bare, oldLine, newLine });
+      if (!line.startsWith("-")) newLine += 1;
+      if (!line.startsWith("+")) oldLine += 1;
+      continue;
+    }
+    if (bare.startsWith(">>>>>>>") && conflictSection) {
+      conflictSection = null;
+      output.push({ type: "conflict-theirs-header", text: bare, oldLine, newLine });
+      if (!line.startsWith("-")) newLine += 1;
+      if (!line.startsWith("+")) oldLine += 1;
+      continue;
+    }
+
+    const conflictOverride =
+      conflictSection === "ours" ? "conflict-ours" :
+      conflictSection === "theirs" ? "conflict-theirs" :
+      null;
+
     if (line.startsWith("+")) {
-      output.push({ type: "add", oldLine: null, newLine, text: line.slice(1) });
+      output.push({ type: conflictOverride || "add", oldLine: null, newLine, text: line.slice(1) });
       newLine += 1;
       continue;
     }
 
     if (line.startsWith("-")) {
-      output.push({ type: "remove", oldLine, newLine: null, text: line.slice(1) });
+      output.push({ type: conflictOverride || "remove", oldLine, newLine: null, text: line.slice(1) });
       oldLine += 1;
       continue;
     }
 
     output.push({
-      type: "context",
+      type: conflictOverride || "context",
       oldLine,
       newLine,
       text: line.startsWith(" ") ? line.slice(1) : line,
@@ -135,6 +233,7 @@ export default function GitPanel({
   const [selectedPath, setSelectedPath] = useState(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffText, setDiffText] = useState("");
+  const [isDiffConflicted, setIsDiffConflicted] = useState(false);
   const [githubRepos, setGithubRepos] = useState([]);
   const [githubConnected, setGithubConnected] = useState(false);
   const [isLoadingRepos, setIsLoadingRepos] = useState(false);
@@ -142,10 +241,14 @@ export default function GitPanel({
   const [selectedRepoId, setSelectedRepoId] = useState(null);
   const [isImportingRepo, setIsImportingRepo] = useState(false);
   const [showFlowInfo, setShowFlowInfo] = useState(false);
+  const [gitIssue, setGitIssue] = useState(null);
 
   const files = useMemo(() => gitStatus?.files || [], [gitStatus]);
+  const conflictFiles = files.filter((file) => file.status === "conflicted");
   const stagedFiles = files.filter((file) => file.staged);
-  const unstagedFiles = files.filter((file) => file.unstaged || !file.staged);
+  const unstagedFiles = files.filter(
+    (file) => (file.unstaged || !file.staged) && file.status !== "conflicted"
+  );
   const hasDirtyChanges = files.length > 0;
   const hasConflicts = Boolean(gitStatus?.hasConflicts);
   const hasStagedChanges = stagedFiles.length > 0;
@@ -155,8 +258,14 @@ export default function GitPanel({
   const canPull = !actionLoading && !hasConflicts && !hasDirtyChanges;
   const nodePathIndex = useMemo(() => buildNodePathIndex(nodes), [nodes]);
   const selectedFile = selectedPath ? files.find((file) => file.path === selectedPath) || null : null;
-  const parsedDiff = useMemo(() => parseUnifiedDiff(diffText), [diffText]);
+  const parsedDiff = useMemo(
+    () => isDiffConflicted ? parseConflictContent(diffText) : parseUnifiedDiff(diffText),
+    [diffText, isDiffConflicted]
+  );
   const selectedRepo = githubRepos.find((repo) => repo.id === selectedRepoId) || null;
+  const gitIssueActionLabel = gitIssue
+    ? getGitSuggestedActionLabel(gitIssue.suggestedAction)
+    : null;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -227,10 +336,12 @@ export default function GitPanel({
 
         if (!cancelled) {
           setDiffText(result.diff || "");
+          setIsDiffConflicted(Boolean(result.isConflicted));
         }
       } catch (error) {
         if (!cancelled) {
           setDiffText("");
+          setIsDiffConflicted(false);
           toast.error(error.message || "Failed to load diff");
         }
       } finally {
@@ -276,6 +387,62 @@ export default function GitPanel({
     }
   };
 
+  const triggerGitIssueAction = async (issue) => {
+    if (!issue) {
+      return;
+    }
+
+    if (issue.suggestedAction === "pull" && canPull) {
+      await runAction("pull", "pull");
+      return;
+    }
+
+    if (issue.suggestedAction === "connect-github") {
+      handleConnectGitHub();
+      return;
+    }
+
+    if (issue.suggestedAction === "resolve-conflicts") {
+      if (!conflictFiles.length) {
+        toast.info("No conflicted files are currently detected.");
+        return;
+      }
+
+      const firstConflict = conflictFiles[0];
+      setSelectedPath(firstConflict.path);
+      await openInEditor(firstConflict.path);
+      return;
+    }
+
+    if (issue.suggestedAction === "retry" && issue.endpoint) {
+      await runAction(issue.endpoint, issue.endpoint);
+    }
+  };
+
+  const presentGitIssue = (payload, action) => {
+    const issue = {
+      ...normalizeGitActionError(payload, action),
+      endpoint: action,
+    };
+    const issueActionLabel = getGitSuggestedActionLabel(issue.suggestedAction);
+
+    setGitIssue(issue);
+
+    toast.error(issue.title, {
+      description: issue.hint ? `${issue.error} ${issue.hint}` : issue.error,
+      action: issueActionLabel
+        ? {
+            label: issueActionLabel,
+            onClick: () => triggerGitIssueAction(issue),
+          }
+        : undefined,
+    });
+
+    if (issue.details) {
+      console.error(`${issue.title}:`, issue.details);
+    }
+  };
+
   const runAction = async (action, endpoint, body = {}) => {
     setActionLoading(action);
     try {
@@ -288,8 +455,11 @@ export default function GitPanel({
 
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(result.error || `Failed to ${endpoint}`);
+        presentGitIssue(result, endpoint);
+        return;
       }
+
+      setGitIssue(null);
 
       if (endpoint === "pull") {
         await dispatch(fetchNodes(projectId));
@@ -301,7 +471,7 @@ export default function GitPanel({
         setCommitMessage("");
       }
     } catch (error) {
-      toast.error(error.message || `Failed to ${endpoint}`);
+      presentGitIssue({ error: error.message || `Failed to ${endpoint}` }, endpoint);
     } finally {
       setActionLoading(null);
     }
@@ -564,10 +734,101 @@ export default function GitPanel({
                   Pull
                 </Button>
               </div>
+
+              {gitIssue ? (
+                <div className="mt-3 rounded-2xl border border-[#4B242C] bg-[#231216] p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-[#FDE2E4]">{gitIssue.title}</p>
+                      <p className="mt-1 text-sm text-[#F6BCC4]">{gitIssue.error}</p>
+                      {gitIssue.hint ? (
+                        <p className="mt-2 text-xs leading-5 text-[#E7A1AB]">{gitIssue.hint}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {gitIssueActionLabel ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 border border-[#6B2F3A] bg-[#30181D] px-3 text-[#FFE2E7] hover:bg-[#3A1D24] hover:text-white"
+                          onClick={() => triggerGitIssueAction(gitIssue)}
+                          disabled={Boolean(actionLoading) || (gitIssue.suggestedAction === "pull" && !canPull)}
+                        >
+                          {gitIssueActionLabel}
+                        </Button>
+                      ) : null}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2 text-[#D9A7AF] hover:bg-[#30181D] hover:text-white"
+                        onClick={() => setGitIssue(null)}
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[240px_1fr]">
               <div className="min-h-0 overflow-y-auto border-b border-[#24242A] xl:border-b-0 xl:border-r">
+                {conflictFiles.length > 0 ? (
+                  <>
+                    <div className="px-3 pt-3 flex items-center gap-2">
+                      <span className="text-[11px] uppercase tracking-[0.14em] text-[#F08A95]">
+                        Merge Conflicts {conflictFiles.length}
+                      </span>
+                    </div>
+                    <div className="mx-3 my-2 rounded-lg border border-[#4B242C] bg-[#1A0C10] px-3 py-2 text-[11px] text-[#E7A1AB]">
+                      Fix each file below, then stage and commit to continue.
+                    </div>
+                    <div className="mt-1">
+                      {conflictFiles.map((file) => {
+                        const conflictLabel = {
+                          "both-modified":   "Both modified",
+                          "both-added":      "Both added",
+                          "both-deleted":    "Both deleted",
+                          "added-by-us":     "Added by us",
+                          "added-by-them":   "Added by them",
+                          "deleted-by-us":   "Deleted by us",
+                          "deleted-by-them": "Deleted by them",
+                          "unmerged":        "Unmerged",
+                        }[file.conflictType] || "Conflict";
+
+                        return (
+                        <div
+                          key={`conflict-${file.path}`}
+                          onClick={() => setSelectedPath(file.path)}
+                          className={`group flex w-full cursor-pointer items-center justify-between px-3 py-2 text-sm transition-colors ${
+                            selectedPath === file.path ? "bg-[#2A161B]" : "hover:bg-[#1F1418]"
+                          }`}
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="text-[#FB7185]">⚠</span>
+                            <span className="truncate text-[#F9CFD6]">{file.path}</span>
+                            <span className="shrink-0 rounded bg-[#3D1820] px-1.5 py-0.5 text-[10px] text-[#FCA5A5]">
+                              {conflictLabel}
+                            </span>
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-1.5 text-[#D4A5AE] hover:bg-[#3A1D24] hover:text-white"
+                            onClick={async (event) => {
+                              event.stopPropagation();
+                              await openInEditor(file.path);
+                            }}
+                          >
+                            Open
+                          </Button>
+                        </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : null}
+
                 <div className="px-3 pt-3 text-[11px] uppercase tracking-[0.14em] text-[#6B7280]">
                   Staged {stagedFiles.length}
                 </div>
@@ -639,11 +900,24 @@ export default function GitPanel({
                       {selectedPath || "Diff Preview"}
                     </p>
                     <p className="text-xs text-[#8B909A]">
-                      {selectedPath ? "Review changes before staging or shipping." : "Select a changed file to inspect its diff."}
+                      {isDiffConflicted
+                        ? "Merge conflict — open in editor, fix markers, then stage and commit."
+                        : selectedPath
+                        ? "Review changes before staging or shipping."
+                        : "Select a changed file to inspect its diff."}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {selectedFile ? (
+                    {isDiffConflicted && selectedFile ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 border border-[#4B2A18] bg-[#2A1800] px-2 text-xs text-[#FDBA74] hover:bg-[#3A2000] hover:text-white"
+                        onClick={() => openInEditor(selectedFile.path)}
+                      >
+                        Open to resolve
+                      </Button>
+                    ) : selectedFile ? (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -665,6 +939,7 @@ export default function GitPanel({
                     <div className="px-4 py-4 text-[#7C8392]">No diff available</div>
                   ) : (
                     parsedDiff.map((line, index) => {
+                      // ── Hunk header (unified diff only)
                       if (line.type === "hunk") {
                         return (
                           <div key={`hunk-${index}`} className="border-b border-[#212127] bg-[#121218] px-4 py-1 text-[#60A5FA]">
@@ -673,6 +948,50 @@ export default function GitPanel({
                         );
                       }
 
+                      // ── Conflict section headers (<<<<<<< / ======= / >>>>>>>)
+                      if (line.type === "conflict-ours-header") {
+                        return (
+                          <div key={`co-h-${index}`} className="border-l-[3px] border-[#3B82F6] bg-[#0A1628] px-4 py-1 font-semibold text-[#60A5FA]">
+                            {line.text}
+                            <span className="ml-2 rounded bg-[#1D3A6A] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-[#93C5FD]">Current Change</span>
+                          </div>
+                        );
+                      }
+                      if (line.type === "conflict-separator") {
+                        return (
+                          <div key={`cs-${index}`} className="bg-[#151520] px-4 py-1 font-semibold text-[#A78BFA]">
+                            {line.text}
+                          </div>
+                        );
+                      }
+                      if (line.type === "conflict-theirs-header") {
+                        return (
+                          <div key={`ct-h-${index}`} className="border-l-[3px] border-[#F97316] bg-[#1A0A00] px-4 py-1 font-semibold text-[#FDBA74]">
+                            {line.text}
+                            <span className="ml-2 rounded bg-[#451F00] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-[#FCD34D]">Incoming Change</span>
+                          </div>
+                        );
+                      }
+
+                      // ── Conflict content lines
+                      if (line.type === "conflict-ours") {
+                        return (
+                          <div key={`co-${index}`} className="grid grid-cols-[60px_1fr] border-l-[3px] border-[#2563EB] bg-[#0D1B30] px-2">
+                            <span className="px-2 text-[#4B6EA8]">{line.lineNo || ""}</span>
+                            <span className="whitespace-pre-wrap break-words px-2 text-[#BFDBFE]">{line.text}</span>
+                          </div>
+                        );
+                      }
+                      if (line.type === "conflict-theirs") {
+                        return (
+                          <div key={`ct-${index}`} className="grid grid-cols-[60px_1fr] border-l-[3px] border-[#C2410C] bg-[#1A0D00] px-2">
+                            <span className="px-2 text-[#8B4513]">{line.lineNo || ""}</span>
+                            <span className="whitespace-pre-wrap break-words px-2 text-[#FED7AA]">{line.text}</span>
+                          </div>
+                        );
+                      }
+
+                      // ── Regular diff lines
                       const tone =
                         line.type === "add"
                           ? "bg-[#0D2419] text-[#9AE6B4]"

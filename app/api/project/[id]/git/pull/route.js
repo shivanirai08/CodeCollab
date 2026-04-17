@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createGitErrorResponse } from "@/lib/gitActionErrors";
 import { ensureProjectAccess } from "@/lib/projectAccess";
 import { getInternalBackendHeaders } from "@/lib/projectRepository";
 
@@ -58,17 +59,13 @@ export async function POST(req, { params: paramsPromise }) {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      return NextResponse.json(
-        { error: result.error || "Failed to pull changes" },
-        { status: response.status || 500 }
-      );
+      const errorResponse = createGitErrorResponse(result, response.status || 500, "pull");
+      return NextResponse.json(errorResponse.body, { status: errorResponse.status });
     }
 
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || "Failed to pull changes" },
-      { status: 500 }
-    );
+    const errorResponse = createGitErrorResponse({ error: error.message }, 500, "pull");
+    return NextResponse.json(errorResponse.body, { status: errorResponse.status });
   }
 }
