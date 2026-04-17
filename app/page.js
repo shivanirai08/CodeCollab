@@ -262,7 +262,8 @@ function Hero() {
               alt="CodeCollab collaborative coding platform interface"
               width={600}
               height={600}
-              className="w-full h-auto max-w-lg drop-shadow-2xl opacity-100"
+              className="w-full h-auto max-w-lg drop-shadow-2xl opacity-100 select-none pointer-events-none"
+              draggable={false}
               priority
               quality={90}
               loading="eager"

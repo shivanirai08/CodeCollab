@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,7 @@ import InlineInput from "./InlineInput";
 import ContextMenu from "./ContextMenu";
 import { toast } from "sonner";
 
-export default function FileSidebar({ className, mobileOpen, onClose }) {
+export default function FileSidebar({ className, mobileOpen, onClose, desktopWidth }) {
   const dispatch = useDispatch();
   const params = useParams();
   const projectId = params.id;
@@ -29,6 +29,7 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
   const activeFileId = useSelector((state) => state.nodes.activeFileId);
   const projectname = useSelector((state) => state.project.projectname);
   const permissions = useSelector((state) => state.project.permissions);
+  const gitStatus = useSelector((state) => state.project.gitStatus);
 
   const [collapsed, setCollapsed] = useState(false);
   const [openFolders, setOpenFolders] = useState(new Set());
@@ -170,6 +171,7 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
       await dispatch(
         updateNode({
           nodeId: renamingNode.nodeId,
+          projectId,
           updates: { name: newName },
         })
       ).unwrap();
@@ -211,7 +213,7 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
   const handleConfirmDelete = async () => {
     if (deleteModal.nodeId) {
       try {
-        await dispatch(deleteNode(deleteModal.nodeId)).unwrap();
+        await dispatch(deleteNode({ nodeId: deleteModal.nodeId, projectId })).unwrap();
         toast.success(`"${deleteModal.nodeName}" deleted successfully`);
       } catch (error) {
         toast.error(`Failed to delete: ${error}`);
@@ -235,6 +237,42 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
   };
 
   const tree = buildTree();
+  const gitStatusByNodeId = useMemo(() => {
+    const files = gitStatus?.files || [];
+
+    if (files.length === 0 || nodes.length === 0) {
+      return {};
+    }
+
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
+    const pathCache = new Map();
+
+    const resolvePath = (nodeId) => {
+      if (!nodeId) return "";
+      if (pathCache.has(nodeId)) return pathCache.get(nodeId);
+      const node = nodeById.get(nodeId);
+      if (!node) return "";
+      const parentPath = node.parent_id ? resolvePath(node.parent_id) : "";
+      const currentPath = parentPath ? `${parentPath}/${node.name}` : node.name;
+      pathCache.set(nodeId, currentPath);
+      return currentPath;
+    };
+
+    const statusByPath = new Map(files.map((file) => [file.path, file.status]));
+
+    return nodes.reduce((acc, node) => {
+      if (node.type !== "file") {
+        return acc;
+      }
+
+      const path = resolvePath(node.id);
+      if (statusByPath.has(path)) {
+        acc[node.id] = statusByPath.get(path);
+      }
+
+      return acc;
+    }, {});
+  }, [gitStatus, nodes]);
 
   return (
     <>
@@ -259,6 +297,7 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
           mobileOpen ? "flex w-64" : "hidden",
           className
         )}
+        style={!mobileOpen && !collapsed && desktopWidth ? { width: `${desktopWidth}px` } : undefined}
       >
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 pt-8 pb-6 relative" onClick={() => router.push("/")}>
@@ -346,6 +385,7 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
                   onCancelRename={handleCancelRename}
                   openFolders={openFolders}
                   canEdit={permissions.canEdit}
+                  gitStatusByNodeId={gitStatusByNodeId}
                 />
               ) : (
                 <FileItem
@@ -355,6 +395,7 @@ export default function FileSidebar({ className, mobileOpen, onClose }) {
                   active={item.id === activeFileId}
                   onClick={() => dispatch(setActiveFile(item.id))}
                   onContextMenu={handleContextMenu}
+                  gitStatus={gitStatusByNodeId[item.id] || null}
                 />
               )
             )}

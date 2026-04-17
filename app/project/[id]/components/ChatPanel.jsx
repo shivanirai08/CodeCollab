@@ -10,18 +10,25 @@ import { toast } from "sonner";
 import { useRealtimeChat } from "@/hooks/useRealtimeChat";
 import DeleteModal from "@/components/ui/DeleteModal";
 
+const MIN_PANEL_WIDTH = 280;
+const MAX_PANEL_WIDTH = 520;
+
 export default function ChatPanel({
   isChatOpen,
   onClose,
   projectId,
   realtimeEnabled,
   onUnreadChange,
+  desktopClassName = "lg:w-72",
+  desktopWidth = 320,
 }) {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, messageId: null,});
+  const [panelWidth, setPanelWidth] = useState(desktopWidth);
+  const [isResizing, setIsResizing] = useState(false);
   const messagesEndRef = useRef(null);
   const hasLoadedMessages = useRef(false);
   const processedMessageIds = useRef(new Set());
@@ -31,6 +38,34 @@ export default function ChatPanel({
   useEffect(() => {
     isChatOpenRef.current = isChatOpen;
   }, [isChatOpen]);
+
+  useEffect(() => {
+    setPanelWidth(desktopWidth);
+  }, [desktopWidth]);
+
+  useEffect(() => {
+    if (!isResizing) {
+      return;
+    }
+
+    const handleMouseMove = (event) => {
+      const nextWidth = window.innerWidth - event.clientX;
+      const clampedWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, nextWidth));
+      setPanelWidth(clampedWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
 
   // Get current user from Redux
   const currentUser = useSelector((state) => ({
@@ -203,14 +238,28 @@ export default function ChatPanel({
       {/* Chat Panel */}
       <div
         className={cn(
-          "flex flex-col overflow-hidden bg-[#19191F] transition-all duration-300 shrink-0 rounded-t-3xl lg:rounded-sm",
-          "hidden lg:flex h-full",  // Desktop behavior
-          isChatOpen ? "lg:w-72" : "lg:w-0",
-          "fixed lg:relative z-50 lg:inset-auto bottom-0 left-0 right-0",     // Mobile behavior - hidden by default
+          "flex shrink-0 flex-col overflow-hidden rounded-t-3xl bg-[#19191F] transition-all duration-300 lg:rounded-sm lg:border lg:border-[#24242A]",
+          "hidden h-full lg:flex",
+          isChatOpen ? cn(desktopClassName, "lg:w-[var(--chat-panel-width)]") : "lg:w-0",
+          "fixed bottom-0 left-0 right-0 z-50 lg:relative lg:inset-auto",
           isChatOpen ? "flex" : "hidden lg:flex",
-          isExpanded ? "h-[90vh]" : "h-[50vh] md:h-full"    // Height based on expansion state
+          isExpanded ? "h-[90vh]" : "h-[50vh] md:h-full"
         )}
+        style={
+          isChatOpen
+            ? { "--chat-panel-width": `${panelWidth}px` }
+            : undefined
+        }
       >
+        {isChatOpen ? (
+          <button
+            type="button"
+            aria-label="Resize chat panel"
+            className="absolute left-0 top-0 hidden h-full w-1 -translate-x-1/2 cursor-col-resize bg-transparent hover:bg-[#9CA3AF]/30 lg:block"
+            onMouseDown={() => setIsResizing(true)}
+          />
+        ) : null}
+
         {/* Header with drag indicator for mobile */}
         <div className="flex flex-col">
           <div className="lg:hidden flex justify-center pt-2 pb-1">
@@ -238,7 +287,7 @@ export default function ChatPanel({
         </div>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
           {isLoading ? (
             <div className="text-sm text-gray-400 text-center mt-8">
               Loading messages...

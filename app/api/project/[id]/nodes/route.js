@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureProjectAccess } from "@/lib/projectAccess";
+import {
+  buildNodePathMap,
+  fetchProjectNodes,
+  syncProjectWorktree,
+} from "@/lib/projectRepository";
 
 export const runtime = "nodejs";
 
@@ -119,6 +124,27 @@ export async function POST(req, { params: paramsPromise }) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    try {
+      const nodes = await fetchProjectNodes(id);
+      const pathMap = buildNodePathMap([...nodes, data]);
+      const relativePath = pathMap.get(data.id);
+
+      if (relativePath) {
+        await syncProjectWorktree(id, {
+          type: "create",
+          relativePath,
+          nodeType: data.type,
+          content: data.type === "file" ? data.content || "" : undefined,
+        });
+      }
+    } catch (syncError) {
+      await admin.from("nodes").delete().eq("id", data.id);
+      return NextResponse.json(
+        { error: syncError.message || "Failed to sync repository worktree" },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json({ node: data });

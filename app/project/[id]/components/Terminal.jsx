@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { X, Play, Trash2, Loader2, AlertCircle, AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSelector, useDispatch } from "react-redux";
@@ -9,7 +9,12 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { setFileProblems } from "@/store/NodesSlice";
 
-export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }) {
+export default function TerminalPanel({
+  isOpen,
+  onClose,
+  initialTab = "output",
+  layout = "overlay",
+}) {
   const dispatch = useDispatch();
   const [output, setOutput] = useState([]);
   const [input, setInput] = useState("");
@@ -132,61 +137,10 @@ export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }
     }
   }, [problems, currentFileId, dispatch]);
 
-  // Auto-analyze code when it changes
-  useEffect(() => {
-    if (!activeFileId || !activeFile) return;
-
-    const sourceCode = fileContents[activeFileId];
-    if (!sourceCode) return;
-
-    // Debounce analysis by 1 second
-    if (analyzeTimeoutRef.current) {
-      clearTimeout(analyzeTimeoutRef.current);
-    }
-
-    analyzeTimeoutRef.current = setTimeout(() => {
-      setCurrentFileId(activeFileId);
-      analyzeCode(sourceCode);
-    }, 1000);
-
-    return () => {
-      if (analyzeTimeoutRef.current) {
-        clearTimeout(analyzeTimeoutRef.current);
-      }
-    };
-  }, [fileContents, activeFileId, activeFile]);
-
-  const analyzeCode = (code) => {
-    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
-    if (!activeFile?.name) {
-      return;
-    }
-
-    const language = getLanguageFromFileName(activeFile.name);
-    setIsAnalyzing(true);
-
-    try {
-      const message = JSON.stringify({
-        action: "analyze",
-        language: language,
-        code: code,
-      });
-
-      socketRef.current.send(message);
-    } catch (error) {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const getLanguageFromFileName = (fileName) => {
+  const getLanguageFromFileName = useCallback((fileName) => {
     if (!fileName) return "javascript";
 
     const ext = fileName.split(".").pop()?.toLowerCase();
-    // Language mapping according to CodeCollab API documentation
-    // Supported: typescript, javascript, python, dart, go, cpp
     const languageMap = {
       js: "javascript",
       jsx: "javascript",
@@ -212,7 +166,55 @@ export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }
     };
 
     return languageMap[ext] || "javascript";
-  };
+  }, []);
+
+  const analyzeCode = useCallback((code) => {
+    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    if (!activeFile?.name) {
+      return;
+    }
+
+    const language = getLanguageFromFileName(activeFile.name);
+    setIsAnalyzing(true);
+
+    try {
+      const message = JSON.stringify({
+        action: "analyze",
+        language: language,
+        code: code,
+      });
+
+      socketRef.current.send(message);
+    } catch (error) {
+      setIsAnalyzing(false);
+    }
+  }, [activeFile?.name, getLanguageFromFileName]);
+
+  // Auto-analyze code when it changes
+  useEffect(() => {
+    if (!activeFileId || !activeFile) return;
+
+    const sourceCode = fileContents[activeFileId];
+    if (!sourceCode) return;
+
+    if (analyzeTimeoutRef.current) {
+      clearTimeout(analyzeTimeoutRef.current);
+    }
+
+    analyzeTimeoutRef.current = setTimeout(() => {
+      setCurrentFileId(activeFileId);
+      analyzeCode(sourceCode);
+    }, 1000);
+
+    return () => {
+      if (analyzeTimeoutRef.current) {
+        clearTimeout(analyzeTimeoutRef.current);
+      }
+    };
+  }, [fileContents, activeFileId, activeFile, analyzeCode]);
 
   const handleRunCode = async () => {
     if (!activeFileId || !activeFile) {
@@ -304,7 +306,14 @@ export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }
   const warningCount = problems.filter(p => p.severity === "warning").length;
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 h-80 bg-[#0F0F14] border border-[#36363E]/50 z-10 flex flex-col rounded-md">
+    <div
+      className={cn(
+        "flex flex-col bg-[#0F0F14]",
+        layout === "overlay"
+          ? "absolute bottom-0 left-0 right-0 z-10 h-80 rounded-md border border-[#36363E]/50"
+          : "h-full"
+      )}
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-[#36363E]">
         <div className="flex items-center gap-4">
@@ -399,7 +408,7 @@ export default function TerminalPanel({ isOpen, onClose, initialTab = "output" }
             >
               {output.length === 0 ? (
                 <div className="text-[#8D8D98] text-center py-8">
-                  Terminal output will appear here. Click "Run" to execute your code.
+                  Terminal output will appear here. Click &quot;Run&quot; to execute your code.
                 </div>
               ) : (
                 output.map((item, index) => (

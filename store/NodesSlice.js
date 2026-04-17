@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { showLoader, hideLoader } from "./LoadingSlice";
+import { fetchGitStatus } from "./ProjectSlice";
 
 function notifyProjectAccessLost(projectId, errorMessage) {
   if (typeof window === "undefined" || !projectId) {
@@ -98,6 +99,9 @@ export const createNode = createAsyncThunk(
       }
       
       const data = await res.json();
+      if (projectId) {
+        dispatch(fetchGitStatus(projectId));
+      }
       return data.node;
     } catch (error) {
       return rejectWithValue(error.message);
@@ -110,7 +114,7 @@ export const createNode = createAsyncThunk(
 // Update node (for content changes)
 export const updateNode = createAsyncThunk(
   "nodes/updateNode",
-  async ({ nodeId, updates }, { rejectWithValue, dispatch }) => {
+  async ({ nodeId, updates, projectId }, { rejectWithValue, dispatch }) => {
     try {
       dispatch(showLoader("Updating node"));
       const res = await fetch(`/api/project/nodes/${nodeId}`, {
@@ -126,6 +130,9 @@ export const updateNode = createAsyncThunk(
       }
       
       const data = await res.json();
+      if (projectId) {
+        dispatch(fetchGitStatus(projectId));
+      }
       return data.node;
     } catch (error) {
       return rejectWithValue(error.message);
@@ -138,7 +145,7 @@ export const updateNode = createAsyncThunk(
 // Update file content (debounced save)
 export const updateFileContent = createAsyncThunk(
   "nodes/updateFileContent",
-  async ({ nodeId, content, projectId }, { rejectWithValue }) => {
+  async ({ nodeId, content, projectId }, { rejectWithValue, dispatch }) => {
     try {
       const res = await fetch(`/api/project/nodes/${nodeId}`, {
         method: "PATCH",
@@ -156,6 +163,9 @@ export const updateFileContent = createAsyncThunk(
       }
       
       const data = await res.json();
+      if (projectId) {
+        dispatch(fetchGitStatus(projectId));
+      }
       return { nodeId, content: data.node.content };
     } catch (error) {
       return rejectWithValue(error.message);
@@ -166,7 +176,7 @@ export const updateFileContent = createAsyncThunk(
 // Delete node
 export const deleteNode = createAsyncThunk(
   "nodes/deleteNode",
-  async (nodeId, { rejectWithValue, dispatch }) => {
+  async ({ nodeId, projectId }, { rejectWithValue, dispatch }) => {
     try {
       dispatch(showLoader("Deleting node"));
       const res = await fetch(`/api/project/nodes/${nodeId}`, {
@@ -179,6 +189,9 @@ export const deleteNode = createAsyncThunk(
         throw new Error(errorData.error || "Failed to delete node");
       }
       
+      if (projectId) {
+        dispatch(fetchGitStatus(projectId));
+      }
       return nodeId;
     } catch (error) {
       return rejectWithValue(error.message);
