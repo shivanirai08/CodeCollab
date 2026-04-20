@@ -13,6 +13,12 @@ A smart **line-locking system** prevents code collisions by locking the line whi
 ### Built-in Chat
 Discuss logic, share snippets, and coordinate in real time right beside your code.
 
+### Git Integration
+Connect your GitHub repository, track file changes, and manage your coding flow with Git actions like status checks, staging, commit, pull, and push directly from the workspace.
+
+### Voice Call Collaboration
+Jump into voice calls with your teammates while coding so you can discuss ideas, debug faster, and pair program smoothly in real time.
+
 ### VS Code-like File Management
 Create folders, add or rename files, and organize your workspace intuitively just like VS Code.
 
