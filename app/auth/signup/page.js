@@ -7,16 +7,17 @@ import { Input } from "@/components/ui/input";
 import { FcGoogle } from "react-icons/fc";
 import { FaGithub } from "react-icons/fa";
 import { toast } from "sonner";
-import { EyeClosed, Eye, Info } from "lucide-react";
+import { EyeClosed, Eye, Info, X } from "lucide-react";
 import Image from "next/image";
 
 export default function SignupPage() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState({ email: false, password: false });
   const [loading, setLoading] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   // for password
   const [visible, setVisible] = useState(false);
   const [showPasswordCriteria, setShowPasswordCriteria] = useState(false);
@@ -54,11 +55,6 @@ export default function SignupPage() {
       toast.error("Password must be at least 6 characters.");
       return;
     }
-    if (!acceptedTerms) {
-      toast.error("You must accept the Terms and Conditions to continue.");
-      return;
-    }
-
     setLoading(true);
 
     // calling signup api
@@ -84,8 +80,51 @@ export default function SignupPage() {
     window.location.href = "/api/github/connect?mode=auth&next=/dashboard";
   };
 
+  const LegalDialog = ({ isOpen, onClose, title, children }) => {
+    if (!isOpen) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+        <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#16171D] p-6 text-white shadow-2xl">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-lg font-semibold">{title}</h3>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-white/10 hover:text-white"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <div className="space-y-3 text-sm leading-6 text-gray-300">{children}</div>
+          <div className="mt-6 flex justify-end">
+            <Button type="button" variant="outline" onClick={onClose} className="border-white/20 text-white hover:bg-white/10">
+              Close
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="relative flex items-center justify-center min-h-screen px-4 bg-gradient-to-b from-background via-background to-[rgba(35, 34, 49, 0.2)]">
+      <LegalDialog isOpen={showTermsModal} onClose={() => setShowTermsModal(false)} title="Terms and Conditions">
+        <p>You can use CodeCollab for legal and respectful collaboration only. No abuse, malware, or unauthorized access attempts.</p>
+        <p>You are responsible for the code, repositories, and content you create or import.</p>
+        <p>Connected services like GitHub are used only to perform the actions you ask for, such as listing or importing repositories.</p>
+        <p>We may suspend accounts involved in harmful or fraudulent activity to protect other users.</p>
+        <p className="text-gray-200">Keep it clean, keep it professional, and we are good.</p>
+      </LegalDialog>
+
+      <LegalDialog isOpen={showPrivacyModal} onClose={() => setShowPrivacyModal(false)} title="Privacy Policy">
+        <p>We store core account data like username, email, and profile information to run your workspace experience.</p>
+        <p>If you connect GitHub, we access account/repository data needed for requested features and do not sell your personal data.</p>
+        <p>Tokens and sensitive auth values are handled securely and access is limited to required backend operations.</p>
+        <p>You can disconnect GitHub anytime from settings, and future GitHub actions stop until you reconnect.</p>
+        <p className="text-gray-200">Your trust is not optional for us. We treat your data like our own.</p>
+      </LegalDialog>
+
       {/* Subtle background glow */}
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.15),transparent_70%)]" />
 
@@ -237,24 +276,6 @@ export default function SignupPage() {
           )}
         </div>
 
-        <label className="flex items-start gap-2 text-sm text-gray-400">
-          <input
-            type="checkbox"
-            checked={acceptedTerms}
-            onChange={(e) => setAcceptedTerms(e.target.checked)}
-            className="mt-1 size-4 rounded accent-black"
-          />
-          I agree to the{" "}
-          <a href="#" className="underline ml-1 hover:text-white">
-            Terms and Conditions
-          </a>{" "}
-          and
-          <a href="#" className="underline ml-1 hover:text-white">
-            Privacy Policy
-          </a>
-          .
-        </label>
-
         <Button 
           type="submit" 
           className="w-full h-11 shadow-lg"
@@ -302,6 +323,26 @@ export default function SignupPage() {
           >
             Sign in
           </Button>
+        </p>
+
+        <p className="text-center text-xs text-gray-500 leading-5">
+          By creating an account or signing in, you agree to our{" "}
+          <button
+            type="button"
+            onClick={() => setShowTermsModal(true)}
+            className="underline hover:text-white"
+          >
+            Terms and Conditions
+          </button>{" "}
+          and{" "}
+          <button
+            type="button"
+            onClick={() => setShowPrivacyModal(true)}
+            className="underline hover:text-white"
+          >
+            Privacy Policy
+          </button>
+          .
         </p>
       </form>
     </div>
