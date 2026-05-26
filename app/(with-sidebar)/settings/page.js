@@ -1,15 +1,17 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import ConfirmDialog from "@/components/ui/ConfirmDialog"
 import { toast } from "sonner"
-import { Eye, EyeOff, Pencil, Camera, Loader2, Mail, Lock, ArrowRight } from "lucide-react"
+import { Eye, EyeOff, Pencil, Camera, Loader2, Mail, Lock, Github } from "lucide-react"
 import Image from "next/image"
 
 export default function SettingsPage() {
   const router = useRouter()
+  const pathname = usePathname()
   const [userData, setUserData] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -29,6 +31,8 @@ export default function SettingsPage() {
   const [showCurrent, setShowCurrent] = useState(false)
   const [passwordLoading, setPasswordLoading] = useState(false)
   const [emailLoading, setEmailLoading] = useState(false)
+  const [removeGitHubLoading, setRemoveGitHubLoading] = useState(false)
+  const [showRemoveGitHubConfirm, setShowRemoveGitHubConfirm] = useState(false)
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -164,12 +168,57 @@ export default function SettingsPage() {
     }
   }
 
+  const handleConnectGitHub = () => {
+    const next = pathname || "/settings"
+    window.location.href = `/api/github/connect?mode=connect&next=${encodeURIComponent(next)}`
+  }
+
+  const handleRemoveGitHub = async () => {
+    setRemoveGitHubLoading(true)
+    try {
+      const res = await fetch("/api/github/remove", {
+        method: "POST",
+        credentials: "same-origin",
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to remove GitHub connection.")
+      }
+
+      setUserData((prev) => ({
+        ...prev,
+        github_connected: false,
+        github_profile: null,
+      }))
+      toast.success("GitHub account removed.")
+    } catch (error) {
+      toast.error(error.message || "Failed to remove GitHub connection.")
+    } finally {
+      setRemoveGitHubLoading(false)
+    }
+  }
+
   const initials = userData?.username
     ? userData.username.slice(0, 2).toUpperCase()
     : "??"
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-2 md:px-0 space-y-6">
+      <ConfirmDialog
+        isOpen={showRemoveGitHubConfirm}
+        onClose={() => setShowRemoveGitHubConfirm(false)}
+        onConfirm={async () => {
+          await handleRemoveGitHub()
+          setShowRemoveGitHubConfirm(false)
+        }}
+        title="Remove GitHub connection?"
+        message="You will lose GitHub import access until you connect again. Existing projects remain unchanged."
+        confirmLabel="Yes, remove"
+        confirmClassName="bg-red-600 hover:bg-red-700 text-white"
+        loading={removeGitHubLoading}
+      />
+
       <div>
         <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="text-sm text-muted-foreground mt-1">Manage your account and preferences</p>
@@ -251,6 +300,43 @@ export default function SettingsPage() {
           <p className="text-sm text-muted-foreground mt-0.5 truncate">
             {loading ? "—" : userData?.email ?? "—"}
           </p>
+        </div>
+      </div>
+
+      {/* ── GitHub Connection ────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="px-6 pt-5 pb-4 border-b border-border flex items-center gap-2">
+          <Github size={16} className="text-muted-foreground" />
+          <h2 className="font-semibold">GitHub Connection</h2>
+        </div>
+        <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            {userData?.github_connected
+              ? "Your GitHub account is connected."
+              : "Connect GitHub to import repositories quickly."}
+          </p>
+
+          {userData?.github_connected ? (
+            <Button
+              variant="outline"
+              onClick={() => setShowRemoveGitHubConfirm(true)}
+              disabled={removeGitHubLoading}
+              className="shrink-0 border-red-300 text-red-400 hover:bg-red-500/10"
+            >
+              {removeGitHubLoading ? (
+                <>
+                  <Loader2 size={14} className="animate-spin mr-1.5" />
+                  Removing...
+                </>
+              ) : (
+                "Remove GitHub"
+              )}
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={handleConnectGitHub} className="shrink-0">
+              Connect GitHub
+            </Button>
+          )}
         </div>
       </div>
 

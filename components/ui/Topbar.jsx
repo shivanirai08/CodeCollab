@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button"
 import LoadingButton from "@/components/ui/LoadingButton"
 import GitHubImportModal from "@/components/ui/GitHubImportModal"
+import ConfirmDialog from "@/components/ui/ConfirmDialog"
 import { Input } from "@/components/ui/input"
 import { Search, Menu, Plus, X, LogOut, Github } from "lucide-react"
 import Image from "next/image";
@@ -29,6 +30,8 @@ export default function Topbar({ onMenuClick }) {
   const [repositories, setRepositories] = useState([]);
   const [isLoadingRepos, setIsLoadingRepos] = useState(false);
   const [isImportingRepo, setIsImportingRepo] = useState(false);
+  const [isRemovingGitHub, setIsRemovingGitHub] = useState(false);
+  const [showRemoveGitHubConfirm, setShowRemoveGitHubConfirm] = useState(false);
   const [userData, setUserData] = useState(null);
 
   useEffect(() => {
@@ -163,8 +166,52 @@ export default function Topbar({ onMenuClick }) {
     }
   };
 
+  const handleRemoveGitHub = async () => {
+    setIsRemovingGitHub(true);
+    try {
+      const response = await fetch("/api/github/remove", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to remove GitHub connection.");
+      }
+
+      setUserData((prev) => ({
+        ...prev,
+        github_connected: false,
+        github_profile: null,
+      }));
+      setRepositories([]);
+      setSelectedRepoId(null);
+      setIsGitHubModalOpen(false);
+      toast.success("GitHub account removed.");
+    } catch (error) {
+      toast.error(error.message || "Failed to remove GitHub connection.");
+    } finally {
+      setIsRemovingGitHub(false);
+      setProfileMenuOpen(false);
+    }
+  };
+
     return(
         <>
+          <ConfirmDialog
+            isOpen={showRemoveGitHubConfirm}
+            onClose={() => setShowRemoveGitHubConfirm(false)}
+            onConfirm={async () => {
+              await handleRemoveGitHub();
+              setShowRemoveGitHubConfirm(false);
+            }}
+            title="Remove GitHub connection?"
+            message="You will lose GitHub import access until you connect again. Existing projects remain unchanged."
+            confirmLabel="Yes, remove"
+            confirmClassName="bg-red-600 hover:bg-red-700 text-white"
+            loading={isRemovingGitHub}
+          />
+
           <GitHubImportModal
             isOpen={isGitHubModalOpen}
             onClose={() => setIsGitHubModalOpen(false)}
@@ -365,6 +412,18 @@ export default function Topbar({ onMenuClick }) {
 
                             {/* Logout Button */}
                             <div className="p-2">
+                              {userData?.github_connected && (
+                                <LoadingButton
+                                  variant="ghost"
+                                  className="w-full justify-start text-sm hover:bg-[#2F2F35] text-orange-300 hover:text-orange-200"
+                                  onClick={() => setShowRemoveGitHubConfirm(true)}
+                                  loading={isRemovingGitHub}
+                                  loadingText="Removing..."
+                                >
+                                  <Github className="size-4 mr-2" />
+                                  Remove GitHub
+                                </LoadingButton>
+                              )}
                               <LoadingButton
                                 variant="ghost"
                                 className="w-full justify-start text-sm hover:bg-[#2F2F35] text-red-400 hover:text-red-300"

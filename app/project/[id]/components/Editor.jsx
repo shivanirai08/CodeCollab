@@ -11,6 +11,71 @@ import useRemoteCursors from "@/hooks/useRemoteCursors";
 import useLineLocks from "@/hooks/useLineLocks";
 import { useParams } from "next/navigation";
 
+/**
+ * parseConflictBlocks(text)
+ * Scans raw file content for git conflict markers and returns an array of
+ * block descriptors with 1-based line numbers and the "ours"/"theirs" lines
+ * needed to resolve each conflict.
+ */
+function parseConflictBlocks(text) {
+  const lines = String(text || "").split("\n");
+  const blocks = [];
+  let cur = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const no = i + 1;
+    if (line.startsWith("<<<<<<<")) {
+      cur = { startLine: no, oursLines: [], separatorLine: 0, theirsLines: [], endLine: 0, oursLabel: line.slice(8).trim(), theirsLabel: "" };
+    } else if (line.startsWith("=======") && cur && cur.separatorLine === 0) {
+      cur.separatorLine = no;
+    } else if (line.startsWith(">>>>>>>") && cur && cur.separatorLine > 0) {
+      cur.endLine = no;
+      cur.theirsLabel = line.slice(8).trim();
+      blocks.push({ ...cur });
+      cur = null;
+    } else if (cur) {
+      if (cur.separatorLine === 0) cur.oursLines.push(line);
+      else cur.theirsLines.push(line);
+    }
+  }
+  return blocks;
+}
+
+/**
+ * applyConflictDecorationsToEditor
+ * Applies Monaco whole-line background decorations for conflict regions.
+ * "Current Change" (ours) gets a blue left-border; "Incoming Change" (theirs)
+ * gets a green left-border — matching VS Code's merge editor colours.
+ */
+function applyConflictDecorationsToEditor(editor, blocks, decorationsRef) {
+  const newDecorations = [];
+  for (const b of blocks) {
+    // <<<<<<< header line
+    newDecorations.push({ range: { startLineNumber: b.startLine, startColumn: 1, endLineNumber: b.startLine, endColumn: 1 }, options: { isWholeLine: true, className: "conflict-marker-header conflict-current-border" } });
+    // "Current Change" body
+    const oursStart = b.startLine + 1;
+    const oursEnd = b.separatorLine - 1;
+    if (oursEnd >= oursStart) {
+      newDecorations.push({ range: { startLineNumber: oursStart, startColumn: 1, endLineNumber: oursEnd, endColumn: 1 }, options: { isWholeLine: true, className: "conflict-current-bg conflict-current-border" } });
+    }
+    // ======= separator
+    newDecorations.push({ range: { startLineNumber: b.separatorLine, startColumn: 1, endLineNumber: b.separatorLine, endColumn: 1 }, options: { isWholeLine: true, className: "conflict-marker-header" } });
+    // "Incoming Change" body
+    const theirsStart = b.separatorLine + 1;
+    const theirsEnd = b.endLine - 1;
+    if (theirsEnd >= theirsStart) {
+      newDecorations.push({ range: { startLineNumber: theirsStart, startColumn: 1, endLineNumber: theirsEnd, endColumn: 1 }, options: { isWholeLine: true, className: "conflict-incoming-bg conflict-incoming-border" } });
+    }
+    // >>>>>>> footer line
+    newDecorations.push({ range: { startLineNumber: b.endLine, startColumn: 1, endLineNumber: b.endLine, endColumn: 1 }, options: { isWholeLine: true, className: "conflict-marker-header conflict-incoming-border" } });
+  }
+  if (decorationsRef.current) {
+    decorationsRef.current.set(newDecorations);
+  } else if (newDecorations.length > 0 && editor.createDecorationsCollection) {
+    decorationsRef.current = editor.createDecorationsCollection(newDecorations);
+  }
+}
+
 const MonacoEditor = () => {
   const dispatch = useDispatch();
   const monaco = useMonaco();
@@ -26,6 +91,11 @@ const MonacoEditor = () => {
   const lastToastTimeRef = useRef({}); // Track last toast time per line
   const isLocalChangeRef = useRef(false); // Track if change is from local user
   const currentContentRef = useRef(""); // Track current content
+
+  // Conflict-resolution refs
+  const conflictBlocksRef = useRef([]);   // current parsed blocks for the open file
+  const conflictCommandsRef = useRef({ current: null, incoming: null, both: null }); // Monaco command IDs
+  const conflictDecorationsRef = useRef(null); // IEditorDecorationsCollection
 
   const activeFileId = useSelector((state) => state.nodes.activeFileId);
   const nodes = useSelector((state) => state.nodes.nodes);
@@ -267,19 +337,61 @@ const MonacoEditor = () => {
   // Render line locks using custom hook (only show OTHER users' locks, not your own)
   useLineLocks(editorRef, monaco, lockedLines, currentUserId);
 
-  // Setup Monaco theme
+  // Setup Monaco theme + conflict decoration CSS + CodeLens provider
   useEffect(() => {
-    if (monaco) {
-      monaco.editor.defineTheme("my-dark", {
-        base: "vs-dark",
-        inherit: true,
-        rules: [],
-        colors: {
-          "editor.background": "#18181e",
-        },
-      });
-      monaco.editor.setTheme("my-dark");
+    if (!monaco) return;
+
+    monaco.editor.defineTheme("my-dark", {
+      base: "vs-dark",
+      inherit: true,
+      rules: [],
+      colors: {
+        "editor.background": "#18181e",
+      },
+    });
+    monaco.editor.setTheme("my-dark");
+
+    // Inject conflict decoration CSS once per page
+    const styleId = "monaco-conflict-styles";
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = [
+        ".conflict-current-bg     { background: rgba(40,90,200,0.18)  !important; }",
+        ".conflict-incoming-bg    { background: rgba(22,163,74,0.18)   !important; }",
+        ".conflict-marker-header  { background: rgba(80,80,80,0.22)    !important; }",
+        ".conflict-current-border  { border-left: 3px solid rgba(64,128,255,0.8)  !important; }",
+        ".conflict-incoming-border { border-left: 3px solid rgba(22,163,74,0.8)   !important; }",
+      ].join("\n");
+      document.head.appendChild(style);
     }
+
+    // Register a CodeLens provider that surfaces "Accept …" buttons above each
+    // conflict block.  The provider reads from refs so it always reflects the
+    // current file's blocks and the current editor instance's command IDs.
+    const codeLensDisposable = monaco.languages.registerCodeLensProvider("*", {
+      provideCodeLenses(_model) {
+        const blocks = conflictBlocksRef.current;
+        const cmds = conflictCommandsRef.current;
+        if (!blocks.length || !cmds.current) return { lenses: [], dispose: () => {} };
+
+        const lenses = [];
+        blocks.forEach((block, i) => {
+          const range = { startLineNumber: block.startLine, startColumn: 1, endLineNumber: block.startLine, endColumn: 1 };
+          lenses.push({ range, command: { id: cmds.current,  title: "✓ Accept Current Change",  arguments: [i] } });
+          lenses.push({ range, command: { id: cmds.incoming, title: "✓ Accept Incoming Change", arguments: [i] } });
+          lenses.push({ range, command: { id: cmds.both,     title: "↕ Accept Both Changes",    arguments: [i] } });
+        });
+        return { lenses, dispose: () => {} };
+      },
+      resolveCodeLens(_model, codeLens) {
+        return codeLens;
+      },
+    });
+
+    return () => {
+      codeLensDisposable.dispose();
+    };
   }, [monaco]);
 
   // Store cursor tracking disposable
@@ -424,6 +536,52 @@ const MonacoEditor = () => {
       });
     }
     // Note: Cursor tracking requires edit permissions and collaborative editing enabled
+
+    // ── Conflict-resolution commands ────────────────────────────────────────
+    // Reset the decoration collection so we create a fresh one for this mount.
+    conflictDecorationsRef.current = null;
+
+    // resolveBlock: replaces the conflict block at blockIndex with the chosen
+    // lines, saves to Redux, and debounce-saves to the database.
+    const resolveBlock = (blockIndex, mode) => {
+      const block = conflictBlocksRef.current[blockIndex];
+      if (!block) return;
+      const model = editor.getModel();
+      if (!model) return;
+
+      let lines;
+      if (mode === "current")       lines = block.oursLines;
+      else if (mode === "incoming") lines = block.theirsLines;
+      else                          lines = [...block.oursLines, ...block.theirsLines]; // both
+
+      editor.executeEdits("conflict-resolution", [{
+        range: {
+          startLineNumber: block.startLine,
+          startColumn: 1,
+          endLineNumber: block.endLine,
+          endColumn: model.getLineMaxColumn(block.endLine),
+        },
+        text: lines.join("\n"),
+      }]);
+      editor.focus();
+
+      const newContent = model.getValue();
+      dispatch(updateLocalContent({ nodeId: activeFileId, content: newContent }));
+      debouncedSave(activeFileId, newContent);
+    };
+
+    // editor.addCommand(0, handler) registers a command without a keybinding
+    // and returns a unique command ID usable by the CodeLens provider.
+    const cmdCurrent  = editor.addCommand(0, (_, i) => resolveBlock(i, "current"));
+    const cmdIncoming = editor.addCommand(0, (_, i) => resolveBlock(i, "incoming"));
+    const cmdBoth     = editor.addCommand(0, (_, i) => resolveBlock(i, "both"));
+    conflictCommandsRef.current = { current: cmdCurrent, incoming: cmdIncoming, both: cmdBoth };
+
+    // Apply initial decorations for conflict markers already present in the file.
+    const initialBlocks = parseConflictBlocks(content);
+    conflictBlocksRef.current = initialBlocks;
+    applyConflictDecorationsToEditor(editor, initialBlocks, conflictDecorationsRef);
+    // ────────────────────────────────────────────────────────────────────────
   };
 
   // Clean up cursor tracking and line locks on unmount
@@ -457,6 +615,16 @@ const MonacoEditor = () => {
       }
     };
   }, [broadcastLineUnlock, activeFileId, currentUserId, dispatch]);
+
+  // Re-parse conflict blocks and refresh decorations whenever the file content
+  // changes (includes resolutions made by the user and remote content updates).
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !activeFileId) return;
+    const blocks = parseConflictBlocks(content);
+    conflictBlocksRef.current = blocks;
+    applyConflictDecorationsToEditor(editor, blocks, conflictDecorationsRef);
+  }, [content, activeFileId]);
 
   // Get language from file extension
   const getLanguageFromFileName = (fileName) => {

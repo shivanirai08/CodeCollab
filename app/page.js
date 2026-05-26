@@ -41,7 +41,7 @@ function Navbar() {
   const handleNavigation = useCallback(async () => {
     setIsNavigating(true);
     await new Promise(resolve => setTimeout(resolve, 300));
-    router.push("/auth/signup");
+    router.push("/auth/login");
   }, [router]);
 
   return (
@@ -125,7 +125,7 @@ function Hero() {
   const handleGetStarted = useCallback(async () => {
     setIsNavigating(true);
     await new Promise(resolve => setTimeout(resolve, 300));
-    router.push("/auth/signup");
+    router.push("/auth/login");
   }, [router]);
 
   return (
