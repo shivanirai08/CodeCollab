@@ -21,6 +21,11 @@ export async function PUT(req) {
 
     const body = await req.json();
     const { username, password } = body;
+    const { data: currentProfile } = await supabase
+      .from("users")
+      .select("username")
+      .eq("id", user.id)
+      .maybeSingle();
 
     // Update password via Supabase Auth if provided
     if (password) {
@@ -61,12 +66,29 @@ export async function PUT(req) {
         return NextResponse.json({ error: "Username already taken." }, { status: 409 });
       }
 
+      const { error: authUpdateError } = await supabase.auth.updateUser({
+        data: {
+          username,
+        },
+      });
+
+      if (authUpdateError) {
+        return NextResponse.json({ error: authUpdateError.message }, { status: 400 });
+      }
+
       const { error: updateError } = await supabase
         .from("users")
         .update({ username })
         .eq("id", user.id);
 
       if (updateError) {
+        if (currentProfile?.username) {
+          await supabase.auth.updateUser({
+            data: {
+              username: currentProfile.username,
+            },
+          });
+        }
         return NextResponse.json({ error: updateError.message }, { status: 500 });
       }
     }
