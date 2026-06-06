@@ -25,6 +25,7 @@ import {
   Sparkles,
   Upload,
   X,
+  CheckCheck,
 } from "lucide-react";
 
 const MIN_PANEL_WIDTH = 360;
@@ -815,32 +816,97 @@ export default function GitPanel({
                           "unmerged":        "Unmerged",
                         }[file.conflictType] || "Conflict";
 
+                        const isResolvingThis = actionLoading === `resolve-ours-${file.path}` || actionLoading === `resolve-theirs-${file.path}`;
+
                         return (
                         <div
                           key={`conflict-${file.path}`}
                           onClick={() => setSelectedPath(file.path)}
-                          className={`group flex w-full cursor-pointer items-center justify-between px-3 py-2 text-sm transition-colors ${
+                          className={`group w-full cursor-pointer px-3 py-2 text-sm transition-colors ${
                             selectedPath === file.path ? "bg-[#2A161B]" : "hover:bg-[#1F1418]"
                           }`}
                         >
-                          <span className="flex min-w-0 items-center gap-2">
-                            <span className="text-[#FB7185]">⚠</span>
-                            <span className="truncate text-[#F9CFD6]">{file.path}</span>
-                            <span className="shrink-0 rounded bg-[#3D1820] px-1.5 py-0.5 text-[10px] text-[#FCA5A5]">
-                              {conflictLabel}
+                          <div className="flex items-center justify-between">
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="text-[#FB7185]">⚠</span>
+                              <span className="truncate text-[#F9CFD6]">{file.path}</span>
+                              <span className="shrink-0 rounded bg-[#3D1820] px-1.5 py-0.5 text-[10px] text-[#FCA5A5]">
+                                {conflictLabel}
+                              </span>
                             </span>
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-1.5 text-[#D4A5AE] hover:bg-[#3A1D24] hover:text-white"
-                            onClick={async (event) => {
-                              event.stopPropagation();
-                              await openInEditor(file.path);
-                            }}
-                          >
-                            Open
-                          </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-1.5 text-[#D4A5AE] hover:bg-[#3A1D24] hover:text-white"
+                              onClick={async (event) => {
+                                event.stopPropagation();
+                                await openInEditor(file.path);
+                              }}
+                            >
+                              Open
+                            </Button>
+                          </div>
+                          {/* Quick resolve buttons */}
+                          <div className="mt-1.5 flex gap-1.5 pl-5">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={isResolvingThis || Boolean(actionLoading)}
+                              className="h-6 rounded-md border border-[#2B3B2B] bg-[#0F1A0F] px-2 text-[10px] text-[#86EFAC] hover:bg-[#162616] hover:text-emerald-300"
+                              onClick={async (event) => {
+                                event.stopPropagation();
+                                setActionLoading(`resolve-ours-${file.path}`);
+                                try {
+                                  const res = await fetch(`/api/project/${projectId}/git/resolve-conflict`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    credentials: "same-origin",
+                                    body: JSON.stringify({ filePath: file.path, strategy: "ours" }),
+                                  });
+                                  const data = await res.json().catch(() => ({}));
+                                  if (!res.ok) { presentGitIssue(data, "resolve-conflict"); return; }
+                                  toast.success(`Kept our version of ${file.path}`);
+                                  await syncStatus();
+                                } catch (err) {
+                                  toast.error("Failed to resolve conflict");
+                                } finally {
+                                  setActionLoading(null);
+                                }
+                              }}
+                            >
+                              <CheckCheck className="mr-1 size-3" />
+                              Keep Ours
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={isResolvingThis || Boolean(actionLoading)}
+                              className="h-6 rounded-md border border-[#2B2B3B] bg-[#0F0F1A] px-2 text-[10px] text-[#93C5FD] hover:bg-[#16161F] hover:text-blue-300"
+                              onClick={async (event) => {
+                                event.stopPropagation();
+                                setActionLoading(`resolve-theirs-${file.path}`);
+                                try {
+                                  const res = await fetch(`/api/project/${projectId}/git/resolve-conflict`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    credentials: "same-origin",
+                                    body: JSON.stringify({ filePath: file.path, strategy: "theirs" }),
+                                  });
+                                  const data = await res.json().catch(() => ({}));
+                                  if (!res.ok) { presentGitIssue(data, "resolve-conflict"); return; }
+                                  toast.success(`Took their version of ${file.path}`);
+                                  await syncStatus();
+                                } catch (err) {
+                                  toast.error("Failed to resolve conflict");
+                                } finally {
+                                  setActionLoading(null);
+                                }
+                              }}
+                            >
+                              <CheckCheck className="mr-1 size-3" />
+                              Take Theirs
+                            </Button>
+                          </div>
                         </div>
                         );
                       })}

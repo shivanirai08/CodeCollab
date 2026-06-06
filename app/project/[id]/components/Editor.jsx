@@ -242,13 +242,46 @@ const MonacoEditor = () => {
   const { broadcastContentChange, broadcastCursorPosition, broadcastLineLock, broadcastLineUnlock, isApplyingRemoteChange } = collaborativeEditing;
 
 
-  // Debounced save to database
+  // Debounced save to database AND disk (autosave)
   const debouncedSave = useCallback(
-    debounce((nodeId, content) => {
+    debounce(async (nodeId, content) => {
       if (!permissions.canEdit) return;
-      dispatch(updateFileContent({ nodeId, content, projectId }));
+
+      try {
+        // Update in database
+        dispatch(updateFileContent({ nodeId, content, projectId }));
+
+        // Resolve the full relative path for this node from the node tree
+        const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+        const resolveRelativePath = (id) => {
+          const segments = [];
+          let cur = nodeMap.get(id);
+          while (cur) {
+            segments.unshift(cur.name);
+            cur = cur.parent_id ? nodeMap.get(cur.parent_id) : null;
+          }
+          return segments.join("/");
+        };
+
+        const relativePath = resolveRelativePath(nodeId);
+        if (relativePath) {
+          try {
+            await fetch(`/api/project/${projectId}/file`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "same-origin",
+              body: JSON.stringify({ filePath: relativePath, content }),
+            });
+          } catch (diskError) {
+            // Disk save is best-effort — DB is authoritative
+            console.warn("Autosave to disk failed (changes saved to DB):", diskError);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to save file:", error);
+      }
     }, 2000),
-    [dispatch, permissions.canEdit, projectId]
+    [dispatch, permissions.canEdit, projectId, nodes]
   );
 
   // Handle editor content change
