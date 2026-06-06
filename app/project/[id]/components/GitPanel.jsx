@@ -463,6 +463,25 @@ export default function GitPanel({
 
       if (endpoint === "pull") {
         await dispatch(fetchNodes(projectId));
+        
+        // Handle merge results from pull
+        if (result.mergeResult) {
+          const { updatedCount, createdCount, deletedCount, conflictedFiles } = result.mergeResult;
+          const summary = [];
+          if (updatedCount > 0) summary.push(`${updatedCount} files updated`);
+          if (createdCount > 0) summary.push(`${createdCount} files added`);
+          if (deletedCount > 0) summary.push(`${deletedCount} files removed`);
+          
+          if (conflictedFiles.length > 0) {
+            toast.error(
+              `Pull complete with conflicts in ${conflictedFiles.length} file(s). Please resolve them.`
+            );
+          } else if (summary.length > 0) {
+            toast.success(`Pull complete: ${summary.join(", ")}`);
+          } else {
+            toast.success("Already up to date");
+          }
+        }
       }
 
       await syncStatus();
