@@ -4,6 +4,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { cn } from "@/lib/utils";
 import { RxCross2 } from "react-icons/rx";
 import { setActiveFile, closeFile } from "@/store/NodesSlice";
+import { AlertCircle, AlertTriangle } from "lucide-react";
 
 export default function EditorTabs({ onOpenProblems }) {
   const dispatch = useDispatch();
@@ -78,14 +79,24 @@ function Tab({ file, active, errorCount, warningCount, onClick, onClose, onError
         {hasProblems && (
           <button
             onClick={handleErrorIndicatorClick}
-            className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 hover:bg-red-500/30 transition-all"
-            title={`${errorCount} error(s), ${warningCount} warning(s)`}
+            className="flex items-center gap-1 px-2 py-1 rounded-md font-semibold transition-all"
+            style={{
+              backgroundColor: hasErrors ? "rgba(239, 68, 68, 0.15)" : "rgba(202, 138, 4, 0.15)",
+              color: hasErrors ? "#FCA5A5" : "#FCD34D",
+            }}
+            title={`${errorCount} error${errorCount !== 1 ? 's' : ''}, ${warningCount} warning${warningCount !== 1 ? 's' : ''}`}
           >
             {hasErrors && (
-              <span className="text-red-400 font-bold">{errorCount}</span>
+              <div className="flex items-center gap-0.5">
+                <AlertCircle className="size-3.5 text-red-400" />
+                <span className="text-[11px] font-bold text-red-400">{errorCount}</span>
+              </div>
             )}
             {hasWarnings && (
-              <span className="text-yellow-400 font-bold">{warningCount}</span>
+              <div className="flex items-center gap-0.5">
+                <AlertTriangle className="size-3.5 text-yellow-400" />
+                <span className="text-[11px] font-bold text-yellow-400">{warningCount}</span>
+              </div>
             )}
           </button>
         )}
@@ -98,6 +109,9 @@ function Tab({ file, active, errorCount, warningCount, onClick, onClose, onError
       </button>
       {hasErrors && (
         <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-red-500" />
+      )}
+      {hasWarnings && !hasErrors && (
+        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-yellow-500" />
       )}
     </div>
   );

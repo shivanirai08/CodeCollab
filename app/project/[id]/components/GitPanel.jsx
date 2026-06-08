@@ -27,6 +27,14 @@ import {
   X,
   CheckCheck,
 } from "lucide-react";
+import { Eye, CheckCircle } from "lucide-react";
+
+// Color-coded status constants
+const FILE_STATUS_COLORS = {
+  staged: { bg: "#10B981", text: "#DFFCF0", label: "Staged" },
+  unstaged: { bg: "#6B7280", text: "#F3F4F6", label: "Modified" },
+  conflicted: { bg: "#EF4444", text: "#FEE2E2", label: "Conflict" },
+};
 
 const MIN_PANEL_WIDTH = 360;
 const MAX_PANEL_WIDTH = 960;
@@ -226,6 +234,7 @@ export default function GitPanel({
   const gitStatusLoading = useSelector((state) => state.project.gitStatusLoading);
   const nodes = useSelector((state) => state.nodes.nodes || []);
   const fileContents = useSelector((state) => state.nodes.fileContents || {});
+    const viewedGitFiles = useSelector((state) => state.nodes.viewedGitFiles[projectId] || new Set());
 
   const [commitMessage, setCommitMessage] = useState("");
   const [actionLoading, setActionLoading] = useState(null);
@@ -281,6 +290,13 @@ export default function GitPanel({
       setSelectedPath(files[0].path);
     }
   }, [isOpen, files, selectedPath]);
+
+    // Mark file as viewed when selected
+    useEffect(() => {
+      if (selectedPath && projectId) {
+        dispatch(markGitFileAsViewed({ projectId, filePath: selectedPath }));
+      }
+    }, [selectedPath, projectId, dispatch]);
 
   useEffect(() => {
     if (!isOpen || repository || !permissions.canEdit) {
@@ -830,9 +846,12 @@ export default function GitPanel({
                             <span className="flex min-w-0 items-center gap-2">
                               <span className="text-[#FB7185]">⚠</span>
                               <span className="truncate text-[#F9CFD6]">{file.path}</span>
-                              <span className="shrink-0 rounded bg-[#3D1820] px-1.5 py-0.5 text-[10px] text-[#FCA5A5]">
+                                <span className="shrink-0 rounded px-2 py-0.5 text-[10px] font-medium" style={{ backgroundColor: FILE_STATUS_COLORS.conflicted.bg, color: FILE_STATUS_COLORS.conflicted.text }}>
                                 {conflictLabel}
                               </span>
+                                {viewedGitFiles.has(file.path) && (
+                                  <CheckCircle className="size-3.5 shrink-0 text-emerald-400" />
+                                )}
                             </span>
                             <Button
                               variant="ghost"
@@ -930,7 +949,14 @@ export default function GitPanel({
                         <span className="text-[#34D399]">M</span>
                         <span className="truncate">{file.path}</span>
                       </span>
-                      <Button
+                        <div className="flex min-w-0 items-center gap-1">
+                          {viewedGitFiles.has(file.path) && (
+                            <CheckCircle className="size-4 shrink-0 text-emerald-400" />
+                          )}
+                          <span className="shrink-0 rounded px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: FILE_STATUS_COLORS.staged.bg, color: FILE_STATUS_COLORS.staged.text }}>
+                            {FILE_STATUS_COLORS.staged.label}
+                          </span>
+                          <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 px-1.5 text-[#7C8392] hover:bg-[#22222A] hover:text-white"
@@ -941,6 +967,7 @@ export default function GitPanel({
                       >
                         <X className="size-3.5" />
                       </Button>
+                        </div>
                     </div>
                   ))}
                 </div>
@@ -961,7 +988,14 @@ export default function GitPanel({
                         <FileCode2 className="size-3.5 text-[#7C8392]" />
                         <span className="truncate">{file.path}</span>
                       </span>
-                      <Button
+                        <div className="flex min-w-0 items-center gap-1">
+                          {viewedGitFiles.has(file.path) && (
+                            <CheckCircle className="size-4 shrink-0 text-emerald-400" />
+                          )}
+                          <span className="shrink-0 rounded px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: FILE_STATUS_COLORS.unstaged.bg, color: FILE_STATUS_COLORS.unstaged.text }}>
+                            {FILE_STATUS_COLORS.unstaged.label}
+                          </span>
+                          <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 px-1.5 text-[#7C8392] hover:bg-[#22222A] hover:text-white"
@@ -973,6 +1007,7 @@ export default function GitPanel({
                       >
                         <ArrowUp className="size-3.5" />
                       </Button>
+                        </div>
                     </div>
                   ))}
                 </div>
