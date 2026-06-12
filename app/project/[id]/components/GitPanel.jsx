@@ -10,7 +10,12 @@ import {
   normalizeGitActionError,
 } from "@/lib/gitActionErrors";
 import { fetchGitStatus, fetchProject } from "@/store/ProjectSlice";
-import { fetchFileContent, fetchNodes, setActiveFile } from "@/store/NodesSlice";
+import {
+  fetchFileContent,
+  fetchNodes,
+  markGitFileAsViewed,
+  setActiveFile,
+} from "@/store/NodesSlice";
 import {
   ArrowUp,
   Check,
