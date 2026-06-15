@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useCallback, useState } from "react";
+import React, { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import Editor, { useMonaco } from "@monaco-editor/react";
 import { useSelector, useDispatch } from "react-redux";
 import { updateLocalContent, updateFileContent, updateRemoteCursor, removeRemoteCursor, clearRemoteCursorsForFile, lockLine, unlockLine, unlockUserLines, clearLockedLinesForFile } from "@/store/NodesSlice";
@@ -10,6 +10,20 @@ import useCollaborativeEditing from "@/hooks/useCollaborativeEditing";
 import useRemoteCursors from "@/hooks/useRemoteCursors";
 import useLineLocks from "@/hooks/useLineLocks";
 import { useParams } from "next/navigation";
+import { fetchGitStatus } from "@/store/ProjectSlice";
+
+function resolveNodePath(nodes, nodeId) {
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const segments = [];
+  let current = nodeMap.get(nodeId);
+
+  while (current) {
+    segments.unshift(current.name);
+    current = current.parent_id ? nodeMap.get(current.parent_id) : null;
+  }
+
+  return segments.join("/");
+}
 
 /**
  * parseConflictBlocks(text)
@@ -83,6 +97,8 @@ const MonacoEditor = () => {
   const params = useParams();
   const projectId = params.id;
   const [versionCounter, setVersionCounter] = useState(0);
+  const [conflictBlockCount, setConflictBlockCount] = useState(0);
+  const [isStagingResolution, setIsStagingResolution] = useState(false);
   const currentLockedLineRef = useRef(null);
   const lockTimeoutRef = useRef(null);
   const contentChangeDisposableRef = useRef(null);
@@ -101,6 +117,7 @@ const MonacoEditor = () => {
   const nodes = useSelector((state) => state.nodes.nodes);
   const fileContents = useSelector((state) => state.nodes.fileContents);
   const permissions = useSelector((state) => state.project.permissions);
+  const gitStatus = useSelector((state) => state.project.gitStatus);
   const remoteCursors = useSelector((state) => state.nodes.remoteCursors[activeFileId] || {});
   const lockedLines = useSelector((state) => state.nodes.lockedLines[activeFileId] || {});
   const isReadOnly = !permissions.canEdit;
@@ -108,6 +125,16 @@ const MonacoEditor = () => {
   // Get active file details
   const activeFile = nodes.find((n) => n.id === activeFileId);
   const content = activeFileId ? fileContents[activeFileId] || "" : "";
+  const activeFilePath = useMemo(
+    () => resolveNodePath(nodes, activeFileId),
+    [nodes, activeFileId]
+  );
+  const isActiveFileConflicted = Boolean(
+    activeFilePath &&
+    gitStatus?.files?.some(
+      (file) => file.path === activeFilePath && file.status === "conflicted"
+    )
+  );
 
   // Collaborative editing callbacks
   const handleRemoteContentChange = useCallback((data) => {
@@ -613,6 +640,7 @@ const MonacoEditor = () => {
     // Apply initial decorations for conflict markers already present in the file.
     const initialBlocks = parseConflictBlocks(content);
     conflictBlocksRef.current = initialBlocks;
+    setConflictBlockCount(initialBlocks.length);
     applyConflictDecorationsToEditor(editor, initialBlocks, conflictDecorationsRef);
     // ────────────────────────────────────────────────────────────────────────
   };
@@ -656,8 +684,47 @@ const MonacoEditor = () => {
     if (!editor || !activeFileId) return;
     const blocks = parseConflictBlocks(content);
     conflictBlocksRef.current = blocks;
+    setConflictBlockCount(blocks.length);
     applyConflictDecorationsToEditor(editor, blocks, conflictDecorationsRef);
   }, [content, activeFileId]);
+
+  const stageResolvedConflict = async () => {
+    if (!activeFileId || !activeFilePath || conflictBlockCount > 0) return;
+
+    setIsStagingResolution(true);
+    debouncedSave.cancel();
+
+    try {
+      const saveResponse = await fetch(`/api/project/${projectId}/file`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ filePath: activeFilePath, content }),
+      });
+      const saveResult = await saveResponse.json().catch(() => ({}));
+      if (!saveResponse.ok) {
+        throw new Error(saveResult.error || "Failed to save resolved file");
+      }
+
+      const stageResponse = await fetch(`/api/project/${projectId}/git/stage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ paths: [activeFilePath] }),
+      });
+      const stageResult = await stageResponse.json().catch(() => ({}));
+      if (!stageResponse.ok) {
+        throw new Error(stageResult.error || "Failed to stage resolved file");
+      }
+
+      await dispatch(fetchGitStatus(projectId));
+      toast.success(`${activeFilePath} resolved and staged`);
+    } catch (error) {
+      toast.error(error.message || "Failed to stage resolved file");
+    } finally {
+      setIsStagingResolution(false);
+    }
+  };
 
   // Get language from file extension
   const getLanguageFromFileName = (fileName) => {
@@ -711,7 +778,28 @@ const MonacoEditor = () => {
   }
 
   return (
-    <div className="h-full w-full relative">
+    <div className="flex h-full w-full flex-col">
+      {(isActiveFileConflicted || conflictBlockCount > 0) && (
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#4B242C] bg-[#1A0C10] px-4 py-2">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[#F9CFD6]">Resolve merge conflict</p>
+            <p className="text-xs text-[#D9A7AF]">
+              {conflictBlockCount > 0
+                ? `${conflictBlockCount} conflict block${conflictBlockCount === 1 ? "" : "s"} remaining. Use the actions above each block.`
+                : "All conflict markers are resolved. Stage this file to finish."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={stageResolvedConflict}
+            disabled={conflictBlockCount > 0 || isStagingResolution || !permissions.canEdit}
+            className="shrink-0 rounded-md border border-[#365D46] bg-[#173322] px-3 py-1.5 text-xs font-medium text-[#A7F3D0] transition-colors hover:bg-[#20452E] disabled:cursor-not-allowed disabled:border-[#3A3033] disabled:bg-[#21171A] disabled:text-[#806D72]"
+          >
+            {isStagingResolution ? "Staging..." : "Stage resolved file"}
+          </button>
+        </div>
+      )}
+      <div className="relative min-h-0 flex-1">
       <Editor
         key={activeFileId} // Force remount when switching files
         height="100%"
@@ -770,6 +858,7 @@ const MonacoEditor = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

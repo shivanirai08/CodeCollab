@@ -25,7 +25,6 @@ const initialState = {
   remoteCursors: {}, // { fileId: { userId: { username, position, color, timestamp } } }
   lockedLines: {}, // { fileId: { lineNumber: { userId, username, timestamp } } }
   fileProblems: {}, // { fileId: [{ line, column, message, severity }] }
-  viewedGitFiles: {}, // { projectId: Set of file paths that have been reviewed in git panel }
   status: "idle",
   error: null,
 };
@@ -329,26 +328,6 @@ const nodesSlice = createSlice({
       const fileId = action.payload;
       delete state.fileProblems[fileId];
     },
-    // Mark a git file as viewed
-    markGitFileAsViewed: (state, action) => {
-      const { projectId, filePath } = action.payload;
-      if (!state.viewedGitFiles[projectId]) {
-        state.viewedGitFiles[projectId] = new Set();
-      }
-      state.viewedGitFiles[projectId].add(filePath);
-    },
-    // Unmark a git file as viewed
-    unmarkGitFileAsViewed: (state, action) => {
-      const { projectId, filePath } = action.payload;
-      if (state.viewedGitFiles[projectId]) {
-        state.viewedGitFiles[projectId].delete(filePath);
-      }
-    },
-    // Clear all viewed git files for a project
-    clearViewedGitFiles: (state, action) => {
-      const projectId = action.payload;
-      state.viewedGitFiles[projectId] = new Set();
-    },
     // Real-time actions for handling changes from other users
     handleRemoteNodeInsert: (state, action) => {
       const newNode = action.payload;
@@ -508,9 +487,6 @@ export const {
   clearLockedLinesForFile,
   setFileProblems,
   clearFileProblems,
-  markGitFileAsViewed,
-  unmarkGitFileAsViewed,
-  clearViewedGitFiles,
   handleRemoteNodeInsert,
   handleRemoteNodeUpdate,
   handleRemoteNodeDelete
