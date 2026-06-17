@@ -118,6 +118,7 @@ const MonacoEditor = () => {
   const fileContents = useSelector((state) => state.nodes.fileContents);
   const permissions = useSelector((state) => state.project.permissions);
   const gitStatus = useSelector((state) => state.project.gitStatus);
+  const currentBranch = useSelector((state) => state.project.repository?.currentBranch);
   const remoteCursors = useSelector((state) => state.nodes.remoteCursors[activeFileId] || {});
   const lockedLines = useSelector((state) => state.nodes.lockedLines[activeFileId] || {});
   const isReadOnly = !permissions.canEdit;
@@ -275,10 +276,9 @@ const MonacoEditor = () => {
       if (!permissions.canEdit) return;
 
       try {
-        // Update in database
-        dispatch(updateFileContent({ nodeId, content, projectId }));
+        // Update in database (also syncs worktree via nodes PATCH)
+        const saveTask = dispatch(updateFileContent({ nodeId, content, projectId }));
 
-        // Resolve the full relative path for this node from the node tree
         const nodeMap = new Map(nodes.map((n) => [n.id, n]));
         const resolveRelativePath = (id) => {
           const segments = [];
@@ -292,20 +292,29 @@ const MonacoEditor = () => {
 
         const relativePath = resolveRelativePath(nodeId);
         if (relativePath) {
-          try {
-            await fetch(`/api/project/${projectId}/file`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              credentials: "same-origin",
-              body: JSON.stringify({ filePath: relativePath, content }),
-            });
-          } catch (diskError) {
-            // Disk save is best-effort — DB is authoritative
-            console.warn("Autosave to disk failed (changes saved to DB):", diskError);
+          const diskResponse = await fetch(`/api/project/${projectId}/file`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ filePath: relativePath, content }),
+          });
+
+          if (!diskResponse.ok) {
+            const diskResult = await diskResponse.json().catch(() => ({}));
+            console.warn("Autosave to disk failed:", diskResult.error || diskResponse.statusText);
           }
         }
+
+        const saveResult = await saveTask.unwrap().catch((error) => {
+          toast.error(error || "Failed to save file");
+          throw error;
+        });
+
+        void saveResult;
       } catch (error) {
-        console.error("Failed to save file:", error);
+        if (!error?.message && typeof error !== "string") {
+          console.error("Failed to save file:", error);
+        }
       }
     }, 2000),
     [dispatch, permissions.canEdit, projectId, nodes]
@@ -801,7 +810,7 @@ const MonacoEditor = () => {
       )}
       <div className="relative min-h-0 flex-1">
       <Editor
-        key={activeFileId} // Force remount when switching files
+        key={`${activeFileId}-${currentBranch || "none"}`}
         height="100%"
         language={language}
         defaultValue={content} // Use defaultValue instead of value for uncontrolled component

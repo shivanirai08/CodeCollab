@@ -226,6 +226,17 @@ const nodesSlice = createSlice({
       state.fileContents = {};
       state.activeFileId = null;
     },
+    resetWorkspace: (state) => {
+      state.nodes = [];
+      state.activeFileId = null;
+      state.openFiles = [];
+      state.fileContents = {};
+      state.remoteCursors = {};
+      state.lockedLines = {};
+      state.fileProblems = {};
+      state.status = "idle";
+      state.error = null;
+    },
     updateLocalContent: (state, action) => {
       const { nodeId, content } = action.payload;
       state.fileContents[nodeId] = content;
@@ -398,10 +409,20 @@ const nodesSlice = createSlice({
       .addCase(fetchNodes.fulfilled, (state, action) => {
         state.status = "succeeded";
         state.nodes = action.payload;
+        const nodeIds = new Set(action.payload.map((node) => node.id));
+        state.openFiles = state.openFiles.filter((id) => nodeIds.has(id));
+        if (state.activeFileId && !nodeIds.has(state.activeFileId)) {
+          state.activeFileId = state.openFiles[0] || null;
+        }
         // Pre-cache content for all files
         action.payload.forEach((node) => {
           if (node.type === "file") {
             state.fileContents[node.id] = node.content || "";
+          }
+        });
+        Object.keys(state.fileContents).forEach((fileId) => {
+          if (!nodeIds.has(fileId)) {
+            delete state.fileContents[fileId];
           }
         });
         state.error = null;
@@ -477,6 +498,7 @@ export const {
   setActiveFile,
   closeFile,
   closeAllFiles,
+  resetWorkspace,
   updateLocalContent,
   updateRemoteCursor,
   removeRemoteCursor,

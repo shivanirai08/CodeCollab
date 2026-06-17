@@ -12,7 +12,7 @@ import useNotifications from "@/hooks/useNotifications";
 import NotificationBell from "@/components/ui/NotificationBell";
 import { toast } from "sonner";
 import { fetchProject, fetchGitStatus } from "@/store/ProjectSlice";
-import { fetchNodes } from "@/store/NodesSlice";
+import { fetchNodes, closeAllFiles } from "@/store/NodesSlice";
 import {
   GitBranch,
   Github,
@@ -123,9 +123,23 @@ export default function TopBar({
         throw new Error(data.error || "Failed to checkout branch");
       }
 
-      toast.success(`Switched to branch "${branch}"`);
-      
-      // Refresh project, status, and nodes
+      const {
+        updatedCount = 0,
+        createdCount = 0,
+        deletedCount = 0,
+      } = data.mergeResult || {};
+      const summary = [];
+      if (updatedCount > 0) summary.push(`${updatedCount} files updated`);
+      if (createdCount > 0) summary.push(`${createdCount} files added`);
+      if (deletedCount > 0) summary.push(`${deletedCount} files removed`);
+
+      toast.success(
+        summary.length > 0
+          ? `Switched to "${data.branch || branch}": ${summary.join(", ")}`
+          : `Switched to branch "${data.branch || branch}"`
+      );
+
+      dispatch(closeAllFiles());
       await dispatch(fetchProject(projectId));
       await dispatch(fetchGitStatus(projectId));
       await dispatch(fetchNodes(projectId));

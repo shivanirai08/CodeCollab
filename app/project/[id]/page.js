@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchProject, memberProject, clearProject, fetchGitStatus } from "@/store/ProjectSlice";
-import { fetchNodes } from "@/store/NodesSlice";
+import { fetchNodes, resetWorkspace } from "@/store/NodesSlice";
 import { fetchUserInfo } from "@/store/UserSlice";
 import { Terminal } from "lucide-react";
 import { HiEye } from "react-icons/hi";
@@ -137,9 +137,19 @@ export default function ProjectWorkspacePage() {
       return;
     }
 
+    let cancelled = false;
+
+    dispatch(resetWorkspace());
+    setRealtimeEnabled(false);
+    setShowAccessDenied(false);
+
     dispatch(fetchProject(projectId))
       .unwrap()
       .then((data) => {
+        if (cancelled) {
+          return;
+        }
+
         if (!data.permissions.canView) {
           setShowAccessDenied(true);
           return;
@@ -155,6 +165,10 @@ export default function ProjectWorkspacePage() {
         setRealtimeEnabled(true);
       })
       .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
         console.error("Failed to fetch project:", error);
         if (
           error.includes("permission") ||
@@ -164,6 +178,13 @@ export default function ProjectWorkspacePage() {
           setShowAccessDenied(true);
         }
       });
+
+    return () => {
+      cancelled = true;
+      setRealtimeEnabled(false);
+      dispatch(clearProject());
+      dispatch(resetWorkspace());
+    };
   }, [dispatch, projectId]);
 
   useEffect(() => {
