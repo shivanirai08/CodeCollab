@@ -11,6 +11,7 @@ import useRemoteCursors from "@/hooks/useRemoteCursors";
 import useLineLocks from "@/hooks/useLineLocks";
 import { useParams } from "next/navigation";
 import { fetchGitStatus } from "@/store/ProjectSlice";
+import { isPathConflicted } from "@/lib/gitStatus";
 
 function resolveNodePath(nodes, nodeId) {
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
@@ -131,10 +132,7 @@ const MonacoEditor = () => {
     [nodes, activeFileId]
   );
   const isActiveFileConflicted = Boolean(
-    activeFilePath &&
-    gitStatus?.files?.some(
-      (file) => file.path === activeFilePath && file.status === "conflicted"
-    )
+    activeFilePath && isPathConflicted(gitStatus, activeFilePath)
   );
 
   // Collaborative editing callbacks

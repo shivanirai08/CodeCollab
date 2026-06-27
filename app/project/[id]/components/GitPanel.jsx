@@ -9,6 +9,10 @@ import {
   getGitSuggestedActionLabel,
   normalizeGitActionError,
 } from "@/lib/gitActionErrors";
+import {
+  getConflictFilesFromGitStatus,
+  normalizeGitNodePath,
+} from "@/lib/gitStatus";
 import { fetchGitStatus, fetchProject } from "@/store/ProjectSlice";
 import {
   fetchFileContent,
@@ -45,10 +49,7 @@ const MIN_PANEL_WIDTH = 360;
 const MAX_PANEL_WIDTH = 960;
 
 function normalizeNodePath(path) {
-  return String(path || "")
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .trim();
+  return normalizeGitNodePath(path);
 }
 
 function buildNodePathIndex(nodes) {
@@ -113,19 +114,32 @@ export default function GitPanel({
   const [isConflictDiff, setIsConflictDiff] = useState(false);
 
   const files = useMemo(() => gitStatus?.files || [], [gitStatus]);
-  const conflictFiles = files.filter((file) => file.status === "conflicted");
+  const conflictFiles = useMemo(
+    () => getConflictFilesFromGitStatus(gitStatus),
+    [gitStatus]
+  );
   const stagedFiles = files.filter((file) => file.staged);
   const unstagedFiles = files.filter(
     (file) => (file.unstaged || !file.staged) && file.status !== "conflicted"
   );
-  const hasDirtyChanges = files.length > 0;
+  const hasDirtyChanges = gitStatus ? !gitStatus.isClean : false;
   const hasConflicts = Boolean(gitStatus?.hasConflicts);
+  const needsRebaseContinue = Boolean(gitStatus?.needsRebaseContinue);
+  const aheadCount = gitStatus?.ahead || 0;
+  const behindCount = gitStatus?.behind || 0;
   const hasStagedChanges = stagedFiles.length > 0;
   const hasCommitMessage = Boolean(commitMessage.trim());
-  const canCommit = hasStagedChanges && hasCommitMessage && !hasConflicts && !actionLoading;
-  const canPush = !actionLoading && !hasConflicts && !hasDirtyChanges && (gitStatus?.ahead || 0) > 0;
-  const canPull = !actionLoading && !hasConflicts && !hasDirtyChanges;
-  const behindCount = gitStatus?.behind || 0;
+  const canCommit =
+    hasStagedChanges && hasCommitMessage && !hasConflicts && !actionLoading && !needsRebaseContinue;
+  const canPush =
+    !actionLoading &&
+    !hasConflicts &&
+    !hasDirtyChanges &&
+    !needsRebaseContinue &&
+    aheadCount > 0;
+  const canPull =
+    !actionLoading && !hasConflicts && !hasDirtyChanges && !needsRebaseContinue && behindCount > 0;
+  const canFinishRebase = !actionLoading && needsRebaseContinue;
   const nodePathIndex = useMemo(() => buildNodePathIndex(nodes), [nodes]);
   const selectedRepo = githubRepos.find((repo) => repo.id === selectedRepoId) || null;
   const gitIssueActionLabel = gitIssue
@@ -216,13 +230,27 @@ export default function GitPanel({
       return;
     }
 
+    if (issue.suggestedAction === "continue-rebase") {
+      await runAction("continue", "continue");
+      return;
+    }
+
     if (issue.suggestedAction === "resolve-conflicts") {
-      if (!conflictFiles.length) {
+      let refreshedStatus = gitStatus;
+
+      try {
+        refreshedStatus = await dispatch(fetchGitStatus(projectId)).unwrap();
+      } catch {
+        // Fall back to the status already in state.
+      }
+
+      const conflicts = getConflictFilesFromGitStatus(refreshedStatus);
+      if (!conflicts.length) {
         toast.info("No conflicted files are currently detected.");
         return;
       }
 
-      const firstConflict = conflictFiles[0];
+      const firstConflict = conflicts[0];
       await openInEditor(firstConflict.path);
       return;
     }
@@ -268,11 +296,22 @@ export default function GitPanel({
 
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
+        const issue = normalizeGitActionError(result, endpoint);
         presentGitIssue(result, endpoint);
+        if (issue.suggestedAction === "resolve-conflicts") {
+          await dispatch(fetchGitStatus(projectId));
+        }
+        if (issue.suggestedAction === "continue-rebase") {
+          await dispatch(fetchGitStatus(projectId));
+        }
         return;
       }
 
       setGitIssue(null);
+
+      if (endpoint === "continue") {
+        toast.success("Rebase finished. You can push your commit now.");
+      }
 
       if (endpoint === "pull") {
         await dispatch(fetchNodes(projectId));
@@ -378,7 +417,9 @@ export default function GitPanel({
 
     dispatch(setActiveFile(nodeId));
 
-    const isConflicted = conflictFiles.some((file) => file.path === normalizedPath);
+    const isConflicted = conflictFiles.some(
+      (file) => normalizeNodePath(file.path) === normalizedPath
+    );
     if (isConflicted || !fileContents[nodeId]) {
       await loadWorktreeContentIntoEditor(normalizedPath, nodeId);
     }
@@ -590,12 +631,33 @@ export default function GitPanel({
                 </div>
                 <div className="rounded-xl border border-[#24242A] bg-[#121218] p-3">
                   <div className="text-[11px] uppercase tracking-[0.18em] text-[#7C8392]">Ship</div>
-                  <div className="mt-2 text-2xl font-semibold text-white">{gitStatus?.ahead || 0}</div>
+                  <div className="mt-2 text-2xl font-semibold text-white">{aheadCount}</div>
                   <div className="text-xs text-[#8B909A]">
                     commits to push{behindCount > 0 ? ` · ${behindCount} behind` : ""}
                   </div>
                 </div>
               </div>
+
+              {needsRebaseContinue ? (
+                <div className="mt-3 rounded-2xl border border-[#4B3B24] bg-[#231C12] p-3">
+                  <p className="text-sm font-semibold text-[#FDE8C8]">Rebase waiting to finish</p>
+                  <p className="mt-1 text-sm text-[#E8C9A0]">
+                    Your conflict resolution commit is saved, but the pull rebase still needs to be completed before you can push.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="mt-3 h-8 bg-[#E5E7EB] px-3 text-black hover:bg-white"
+                    onClick={() => runAction("continue", "continue")}
+                    disabled={!canFinishRebase}
+                  >
+                    {actionLoading === "continue" ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      "Finish rebase"
+                    )}
+                  </Button>
+                </div>
+              ) : null}
 
               <textarea
                 value={commitMessage}
