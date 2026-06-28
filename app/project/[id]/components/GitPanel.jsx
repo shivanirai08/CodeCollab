@@ -15,7 +15,6 @@ import {
 } from "@/lib/gitStatus";
 import { fetchGitStatus, fetchProject } from "@/store/ProjectSlice";
 import {
-  fetchFileContent,
   fetchNodes,
   setActiveFile,
   updateLocalContent,
@@ -24,7 +23,6 @@ import {
   ArrowUp,
   Check,
   Download,
-  ExternalLink,
   FileCode2,
   FolderGit2,
   GitBranch,
@@ -36,7 +34,6 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import GitDiffViewer from "./GitDiffViewer";
 
 // Color-coded status constants
 const FILE_STATUS_COLORS = {
@@ -94,7 +91,6 @@ export default function GitPanel({
   const gitStatusLoading = useSelector((state) => state.project.gitStatusLoading);
   const gitStatusError = useSelector((state) => state.project.gitStatusError);
   const nodes = useSelector((state) => state.nodes.nodes || []);
-  const fileContents = useSelector((state) => state.nodes.fileContents || {});
 
   const [commitMessage, setCommitMessage] = useState("");
   const [actionLoading, setActionLoading] = useState(null);
@@ -108,10 +104,6 @@ export default function GitPanel({
   const [isImportingRepo, setIsImportingRepo] = useState(false);
   const [showFlowInfo, setShowFlowInfo] = useState(false);
   const [gitIssue, setGitIssue] = useState(null);
-  const [selectedDiffPath, setSelectedDiffPath] = useState(null);
-  const [diffText, setDiffText] = useState("");
-  const [diffLoading, setDiffLoading] = useState(false);
-  const [isConflictDiff, setIsConflictDiff] = useState(false);
 
   const files = useMemo(() => gitStatus?.files || [], [gitStatus]);
   const conflictFiles = useMemo(
@@ -341,9 +333,6 @@ export default function GitPanel({
       if (endpoint === "resolve-conflict") {
         await dispatch(fetchNodes(projectId));
         toast.success(`Resolved ${body.filePath || "file"}`);
-        if (selectedDiffPath === body.filePath) {
-          await loadDiff(body.filePath);
-        }
       }
 
       await syncStatus();
@@ -358,52 +347,38 @@ export default function GitPanel({
     }
   };
 
-  const loadDiff = async (filePath) => {
+  const loadWorktreeContentIntoEditor = async (filePath, nodeId) => {
     const normalizedPath = normalizeNodePath(filePath);
-    if (!normalizedPath) return;
+    const isConflicted = conflictFiles.some(
+      (file) => normalizeNodePath(file.path) === normalizedPath
+    );
 
-    setDiffLoading(true);
-    try {
+    if (isConflicted) {
       const response = await fetch(
         `/api/project/${projectId}/git/diff?path=${encodeURIComponent(normalizedPath)}`,
         { credentials: "same-origin", cache: "no-store" }
       );
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to load diff");
+
+      if (response.ok && result.diff) {
+        dispatch(updateLocalContent({ nodeId, content: result.diff }));
+        return;
       }
 
-      setDiffText(result.diff || "");
-      setIsConflictDiff(Boolean(result.isConflicted));
-    } catch (error) {
-      setDiffText("");
-      setIsConflictDiff(false);
-      toast.error(error.message || "Failed to load diff");
-    } finally {
-      setDiffLoading(false);
+      throw new Error(result.error || "Failed to load conflicted file");
     }
-  };
 
-  const selectFile = async (filePath) => {
-    const normalizedPath = normalizeNodePath(filePath);
-    setSelectedDiffPath(normalizedPath);
-    await loadDiff(normalizedPath);
-  };
-
-  const loadWorktreeContentIntoEditor = async (filePath, nodeId) => {
-    const normalizedPath = normalizeNodePath(filePath);
     const response = await fetch(
-      `/api/project/${projectId}/git/diff?path=${encodeURIComponent(normalizedPath)}`,
+      `/api/project/${projectId}/file?path=${encodeURIComponent(normalizedPath)}`,
       { credentials: "same-origin", cache: "no-store" }
     );
     const result = await response.json().catch(() => ({}));
 
-    if (response.ok && result.isConflicted && result.diff) {
-      dispatch(updateLocalContent({ nodeId, content: result.diff }));
-      return;
+    if (!response.ok) {
+      throw new Error(result.error || "Failed to load file from worktree");
     }
 
-    await dispatch(fetchFileContent(nodeId));
+    dispatch(updateLocalContent({ nodeId, content: result.content || "" }));
   };
 
   const openInEditor = async (filePath) => {
@@ -415,13 +390,13 @@ export default function GitPanel({
       return;
     }
 
-    dispatch(setActiveFile(nodeId));
-
-    const isConflicted = conflictFiles.some(
-      (file) => normalizeNodePath(file.path) === normalizedPath
-    );
-    if (isConflicted || !fileContents[nodeId]) {
+    try {
+      // Load worktree content into Redux before activating the file so Monaco's
+      // initial defaultValue receives the on-disk version, not stale DB cache.
       await loadWorktreeContentIntoEditor(normalizedPath, nodeId);
+      dispatch(setActiveFile(nodeId));
+    } catch (error) {
+      toast.error(error.message || "Failed to open file in editor");
     }
   };
 
@@ -759,7 +734,7 @@ export default function GitPanel({
                       </span>
                     </div>
                     <div className="mx-3 my-2 rounded-lg border border-[#4B242C] bg-[#1A0C10] px-3 py-2 text-[11px] text-[#E7A1AB]">
-                      Use Keep Ours / Take Theirs, or open the file in the editor to resolve manually.
+                      Click a file to open it in the editor, or use Keep Ours / Take Theirs.
                     </div>
                     <div className="mt-1">
                       {conflictFiles.map((file) => {
@@ -774,16 +749,14 @@ export default function GitPanel({
                           "unmerged":        "Unmerged",
                         }[file.conflictType] || "Conflict";
 
-                        const isSelected = selectedDiffPath === file.path;
-
                         return (
                         <div
                           key={`conflict-${file.path}`}
-                          className={`px-3 py-2 text-sm transition-colors ${isSelected ? "bg-[#1F1418]" : "hover:bg-[#1F1418]"}`}
+                          className="px-3 py-2 text-sm transition-colors hover:bg-[#1F1418]"
                         >
                           <button
                             type="button"
-                            onClick={() => selectFile(file.path)}
+                            onClick={() => openInEditor(file.path)}
                             className="flex w-full cursor-pointer items-center justify-between"
                           >
                             <span className="flex min-w-0 items-center gap-2">
@@ -801,7 +774,10 @@ export default function GitPanel({
                                 variant="ghost"
                                 className="h-7 border border-[#365D46] bg-[#173322] px-2 text-[11px] text-[#A7F3D0] hover:bg-[#20452E]"
                                 disabled={Boolean(actionLoading)}
-                                onClick={() => resolveConflict(file.path, "ours")}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  resolveConflict(file.path, "ours");
+                                }}
                               >
                                 Keep Ours
                               </Button>
@@ -810,18 +786,12 @@ export default function GitPanel({
                                 variant="ghost"
                                 className="h-7 border border-[#1e3a5f] bg-[#172554] px-2 text-[11px] text-[#93c5fd] hover:bg-[#1e40af]/30"
                                 disabled={Boolean(actionLoading)}
-                                onClick={() => resolveConflict(file.path, "theirs")}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  resolveConflict(file.path, "theirs");
+                                }}
                               >
                                 Take Theirs
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 px-2 text-[11px] text-[#D9A7AF] hover:bg-[#30181D]"
-                                onClick={() => openInEditor(file.path)}
-                              >
-                                <ExternalLink className="mr-1 size-3" />
-                                Editor
                               </Button>
                             </div>
                           ) : null}
@@ -839,8 +809,8 @@ export default function GitPanel({
                   {stagedFiles.map((file) => (
                     <div
                       key={`staged-${file.path}`}
-                      onClick={() => selectFile(file.path)}
-                      className={`group flex w-full cursor-pointer items-center justify-between px-3 py-2 text-sm transition-colors ${selectedDiffPath === file.path ? "bg-[#17171D]" : "hover:bg-[#17171D]"}`}
+                      onClick={() => openInEditor(file.path)}
+                      className="group flex w-full cursor-pointer items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-[#17171D]"
                     >
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="text-[#34D399]">M</span>
@@ -873,8 +843,8 @@ export default function GitPanel({
                   {unstagedFiles.map((file) => (
                     <div
                       key={`unstaged-${file.path}`}
-                      onClick={() => selectFile(file.path)}
-                      className={`group flex w-full cursor-pointer items-center justify-between px-3 py-2 text-sm transition-colors ${selectedDiffPath === file.path ? "bg-[#17171D]" : "hover:bg-[#17171D]"}`}
+                      onClick={() => openInEditor(file.path)}
+                      className="group flex w-full cursor-pointer items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-[#17171D]"
                     >
                       <span className="flex min-w-0 items-center gap-2">
                         <FileCode2 className="size-3.5 text-[#7C8392]" />
@@ -900,16 +870,6 @@ export default function GitPanel({
                     </div>
                   ))}
                 </div>
-            </div>
-
-            <div className="h-52 shrink-0 border-t border-[#24242A] bg-[#0A0A0E]">
-              <GitDiffViewer
-                filePath={selectedDiffPath}
-                diffText={diffText}
-                isLoading={diffLoading}
-                isConflictDiff={isConflictDiff}
-                onOpenInEditor={openInEditor}
-              />
             </div>
             </div>
           </>

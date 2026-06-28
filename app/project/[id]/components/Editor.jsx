@@ -695,6 +695,35 @@ const MonacoEditor = () => {
     applyConflictDecorationsToEditor(editor, blocks, conflictDecorationsRef);
   }, [content, activeFileId]);
 
+  // Keep Monaco in sync when Redux content is updated externally (e.g. git panel
+  // worktree load). defaultValue only applies on mount, so without this the
+  // editor can stay empty/stale after setActiveFile.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !activeFileId) return;
+
+    const model = editor.getModel();
+    if (!model) return;
+
+    const editorValue = model.getValue();
+    if (editorValue === content) {
+      currentContentRef.current = content;
+      return;
+    }
+
+    if (isApplyingRemoteChange()) {
+      return;
+    }
+
+    isLocalChangeRef.current = false;
+    model.pushEditOperations(
+      [],
+      [{ range: model.getFullModelRange(), text: content }],
+      () => null
+    );
+    currentContentRef.current = content;
+  }, [content, activeFileId, isApplyingRemoteChange]);
+
   const stageResolvedConflict = async () => {
     if (!activeFileId || !activeFilePath || conflictBlockCount > 0) return;
 
