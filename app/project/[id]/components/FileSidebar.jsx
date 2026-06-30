@@ -377,7 +377,9 @@ export default function FileSidebar({ className, mobileOpen, onClose, desktopWid
                   collapsed={collapsed}
                   open={openFolders.has(item.id)}
                   onToggle={toggleFolder}
-                  onFileClick={(fileId) => dispatch(setActiveFile(fileId))}
+                  onFileClick={(fileId) => {
+                    dispatch(setActiveFile(fileId));
+                  }}
                   activeFileId={activeFileId}
                   onContextMenu={handleContextMenu}
                   onAddFile={handleAddFile}
@@ -398,7 +400,9 @@ export default function FileSidebar({ className, mobileOpen, onClose, desktopWid
                   file={item}
                   collapsed={collapsed}
                   active={item.id === activeFileId}
-                  onClick={() => dispatch(setActiveFile(item.id))}
+                  onClick={() => {
+                    dispatch(setActiveFile(item.id));
+                  }}
                   onContextMenu={handleContextMenu}
                   gitStatus={gitStatusByNodeId[item.id] || null}
                 />

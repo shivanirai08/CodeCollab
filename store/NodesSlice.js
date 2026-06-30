@@ -1,6 +1,36 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { showLoader, hideLoader } from "./LoadingSlice";
 import { fetchGitStatus } from "./ProjectSlice";
+import {
+  getGitDiffTabId,
+  getNextEditorTabId,
+  getNodeIdFromTabId,
+  isGitDiffTabId,
+} from "@/lib/editorTabs";
+
+function syncOpenFiles(state) {
+  state.openFiles = state.editorTabOrder.filter((tabId) => !isGitDiffTabId(tabId));
+}
+
+function closeTabsForNode(state, nodeId) {
+  const diffTabId = getGitDiffTabId(nodeId);
+  state.editorTabOrder = state.editorTabOrder.filter(
+    (id) => id !== nodeId && id !== diffTabId
+  );
+  delete state.fileContents[nodeId];
+  delete state.gitDiffTabsById[diffTabId];
+
+  if (state.activeEditorTabId === nodeId || state.activeEditorTabId === diffTabId) {
+    setActiveTab(state, getNextEditorTabId(state.editorTabOrder, nodeId));
+  }
+
+  syncOpenFiles(state);
+}
+
+function setActiveTab(state, tabId) {
+  state.activeEditorTabId = tabId;
+  state.activeFileId = tabId ? getNodeIdFromTabId(tabId) : null;
+}
 
 function notifyProjectAccessLost(projectId, errorMessage) {
   if (typeof window === "undefined" || !projectId) {
@@ -20,8 +50,11 @@ function notifyProjectAccessLost(projectId, errorMessage) {
 const initialState = {
   nodes: [],
   activeFileId: null,
+  activeEditorTabId: null,
+  editorTabOrder: [],
   openFiles: [],
   fileContents: {},
+  gitDiffTabsById: {},
   remoteCursors: {}, // { fileId: { userId: { username, position, color, timestamp } } }
   lockedLines: {}, // { fileId: { lineNumber: { userId, username, timestamp } } }
   fileProblems: {}, // { fileId: [{ line, column, message, severity }] }
@@ -207,30 +240,102 @@ const nodesSlice = createSlice({
   reducers: {
     setActiveFile: (state, action) => {
       const fileId = action.payload;
-      state.activeFileId = fileId;
-      if (fileId && !state.openFiles.includes(fileId)) {
-        state.openFiles.push(fileId);
+      if (!fileId) {
+        setActiveTab(state, null);
+        return;
       }
+
+      if (!state.editorTabOrder.includes(fileId)) {
+        state.editorTabOrder.push(fileId);
+      }
+
+      setActiveTab(state, fileId);
+      syncOpenFiles(state);
+    },
+    setActiveEditorTab: (state, action) => {
+      const tabId = action.payload;
+      if (!tabId) {
+        setActiveTab(state, null);
+        return;
+      }
+
+      if (!state.editorTabOrder.includes(tabId)) {
+        state.editorTabOrder.push(tabId);
+      }
+
+      setActiveTab(state, tabId);
+      syncOpenFiles(state);
+    },
+    openGitDiffTab: (state, action) => {
+      const { nodeId, filePath, original, modified } = action.payload;
+      const tabId = getGitDiffTabId(nodeId);
+
+      state.gitDiffTabsById[tabId] = {
+        nodeId,
+        filePath,
+        original: original ?? "",
+        modified: modified ?? "",
+      };
+
+      if (!state.editorTabOrder.includes(tabId)) {
+        state.editorTabOrder.push(tabId);
+      }
+
+      setActiveTab(state, tabId);
+      syncOpenFiles(state);
+    },
+    updateGitDiffTabModified: (state, action) => {
+      const { tabId, modified } = action.payload;
+      if (state.gitDiffTabsById[tabId]) {
+        state.gitDiffTabsById[tabId].modified = modified;
+      }
+    },
+    closeEditorTab: (state, action) => {
+      const tabId = action.payload;
+      state.editorTabOrder = state.editorTabOrder.filter((id) => id !== tabId);
+
+      if (isGitDiffTabId(tabId)) {
+        delete state.gitDiffTabsById[tabId];
+      } else {
+        delete state.fileContents[tabId];
+      }
+
+      if (state.activeEditorTabId === tabId) {
+        setActiveTab(state, getNextEditorTabId(state.editorTabOrder, tabId));
+      }
+
+      syncOpenFiles(state);
     },
     closeFile: (state, action) => {
       const fileId = action.payload;
-      state.openFiles = state.openFiles.filter((id) => id !== fileId);
-      // Remove from cache
+      const diffTabId = getGitDiffTabId(fileId);
+
+      state.editorTabOrder = state.editorTabOrder.filter(
+        (id) => id !== fileId && id !== diffTabId
+      );
       delete state.fileContents[fileId];
-      if (state.activeFileId === fileId) {
-        state.activeFileId = state.openFiles[0] || null;
+      delete state.gitDiffTabsById[diffTabId];
+
+      if (state.activeEditorTabId === fileId || state.activeEditorTabId === diffTabId) {
+        setActiveTab(state, getNextEditorTabId(state.editorTabOrder, fileId));
       }
+
+      syncOpenFiles(state);
     },
     closeAllFiles: (state) => {
+      state.editorTabOrder = [];
       state.openFiles = [];
       state.fileContents = {};
-      state.activeFileId = null;
+      state.gitDiffTabsById = {};
+      setActiveTab(state, null);
     },
     resetWorkspace: (state) => {
       state.nodes = [];
-      state.activeFileId = null;
+      setActiveTab(state, null);
+      state.editorTabOrder = [];
       state.openFiles = [];
       state.fileContents = {};
+      state.gitDiffTabsById = {};
       state.remoteCursors = {};
       state.lockedLines = {};
       state.fileProblems = {};
@@ -392,11 +497,7 @@ const nodesSlice = createSlice({
 
       removeNodeAndChildren(nodeId);
 
-      // Close the file if it was open
-      state.openFiles = state.openFiles.filter((id) => id !== nodeId);
-      if (state.activeFileId === nodeId) {
-        state.activeFileId = state.openFiles[0] || null;
-      }
+      closeTabsForNode(state, nodeId);
     },
   },
   extraReducers: (builder) => {
@@ -410,10 +511,23 @@ const nodesSlice = createSlice({
         state.status = "succeeded";
         state.nodes = action.payload;
         const nodeIds = new Set(action.payload.map((node) => node.id));
-        state.openFiles = state.openFiles.filter((id) => nodeIds.has(id));
-        if (state.activeFileId && !nodeIds.has(state.activeFileId)) {
-          state.activeFileId = state.openFiles[0] || null;
+        state.editorTabOrder = state.editorTabOrder.filter((tabId) => {
+          const nodeId = getNodeIdFromTabId(tabId);
+          return nodeIds.has(nodeId);
+        });
+        Object.keys(state.gitDiffTabsById).forEach((tabId) => {
+          const nodeId = state.gitDiffTabsById[tabId]?.nodeId;
+          if (!nodeIds.has(nodeId)) {
+            delete state.gitDiffTabsById[tabId];
+          }
+        });
+        if (
+          state.activeEditorTabId &&
+          !state.editorTabOrder.includes(state.activeEditorTabId)
+        ) {
+          setActiveTab(state, state.editorTabOrder[0] || null);
         }
+        syncOpenFiles(state);
         // Pre-cache content for all files
         action.payload.forEach((node) => {
           if (node.type === "file") {
@@ -482,10 +596,7 @@ const nodesSlice = createSlice({
         };
         
         removeNodeAndChildren(nodeId);
-        state.openFiles = state.openFiles.filter((id) => id !== nodeId);
-        if (state.activeFileId === nodeId) {
-          state.activeFileId = state.openFiles[0] || null;
-        }
+        closeTabsForNode(state, nodeId);
         state.error = null;
       })
       .addCase(deleteNode.rejected, (state, action) => {
@@ -496,6 +607,10 @@ const nodesSlice = createSlice({
 
 export const {
   setActiveFile,
+  setActiveEditorTab,
+  openGitDiffTab,
+  updateGitDiffTabModified,
+  closeEditorTab,
   closeFile,
   closeAllFiles,
   resetWorkspace,

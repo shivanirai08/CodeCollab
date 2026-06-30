@@ -2,8 +2,10 @@
 
 import React, { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import Editor, { useMonaco } from "@monaco-editor/react";
+import GitDiffEditor from "./GitDiffEditor";
 import { useSelector, useDispatch } from "react-redux";
-import { updateLocalContent, updateFileContent, updateRemoteCursor, removeRemoteCursor, clearRemoteCursorsForFile, lockLine, unlockLine, unlockUserLines, clearLockedLinesForFile } from "@/store/NodesSlice";
+import { updateLocalContent, updateFileContent, updateGitDiffTabModified, updateRemoteCursor, removeRemoteCursor, clearRemoteCursorsForFile, lockLine, unlockLine, unlockUserLines, clearLockedLinesForFile } from "@/store/NodesSlice";
+import { isGitDiffTabId } from "@/lib/editorTabs";
 import { debounce } from "lodash";
 import { toast } from "sonner";
 import useCollaborativeEditing from "@/hooks/useCollaborativeEditing";
@@ -114,7 +116,9 @@ const MonacoEditor = () => {
   const conflictCommandsRef = useRef({ current: null, incoming: null, both: null }); // Monaco command IDs
   const conflictDecorationsRef = useRef(null); // IEditorDecorationsCollection
 
+  const activeEditorTabId = useSelector((state) => state.nodes.activeEditorTabId);
   const activeFileId = useSelector((state) => state.nodes.activeFileId);
+  const gitDiffTabsById = useSelector((state) => state.nodes.gitDiffTabsById);
   const nodes = useSelector((state) => state.nodes.nodes);
   const fileContents = useSelector((state) => state.nodes.fileContents);
   const permissions = useSelector((state) => state.project.permissions);
@@ -253,6 +257,14 @@ const MonacoEditor = () => {
   const currentUserId = useSelector((state) => state.user.id);
   const currentUsername = useSelector((state) => state.user.userName);
 
+  const isGitDiffActive = Boolean(
+    activeEditorTabId && isGitDiffTabId(activeEditorTabId)
+  );
+  const activeGitDiffTab = isGitDiffActive ? gitDiffTabsById[activeEditorTabId] : null;
+  const isRegularFileTabActive = Boolean(
+    activeEditorTabId && !isGitDiffTabId(activeEditorTabId)
+  );
+
   // Collaborative editing hook - enabled for both view and edit users
   // View-only users can receive updates but cannot broadcast
   const collaborativeEditing = useCollaborativeEditing(projectId, activeFileId, {
@@ -261,7 +273,11 @@ const MonacoEditor = () => {
     onLineLock: handleLineLock,
     onLineUnlock: handleLineUnlock,
     onUserLeaveFile: handleUserLeaveFile,
-    enabled: (permissions.canView || permissions.canEdit) && !!activeFileId && !!currentUserId,
+    enabled:
+      (permissions.canView || permissions.canEdit) &&
+      !!activeFileId &&
+      !!currentUserId &&
+      isRegularFileTabActive,
     canBroadcast: permissions.canEdit, // Only users with edit permission can broadcast
   });
 
@@ -318,7 +334,6 @@ const MonacoEditor = () => {
     [dispatch, permissions.canEdit, projectId, nodes]
   );
 
-  // Handle editor content change
   const handleEditorChange = (value) => {
     if (!activeFileId || !permissions.canEdit) return;
 
@@ -344,6 +359,36 @@ const MonacoEditor = () => {
     }
   };
 
+  const debouncedDiffSave = useCallback(
+    debounce(async (filePath, content) => {
+      if (!permissions.canEdit || !filePath) return;
+
+      try {
+        const diskResponse = await fetch(`/api/project/${projectId}/file`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ filePath, content }),
+        });
+
+        if (!diskResponse.ok) {
+          const diskResult = await diskResponse.json().catch(() => ({}));
+          console.warn("Diff autosave to disk failed:", diskResult.error || diskResponse.statusText);
+        }
+      } catch (error) {
+        console.error("Failed to save diff changes:", error);
+      }
+    }, 2000),
+    [permissions.canEdit, projectId]
+  );
+
+  const handleGitDiffModifiedChange = (value) => {
+    if (!activeEditorTabId || !permissions.canEdit || !isGitDiffActive || !activeGitDiffTab) return;
+
+    dispatch(updateGitDiffTabModified({ tabId: activeEditorTabId, modified: value }));
+    debouncedDiffSave(activeGitDiffTab.filePath, value);
+  };
+
   const handleReadOnlyAttempt = () => {
     if (isReadOnly) {
       toast.error("You don't have permission to edit this file");
@@ -354,8 +399,9 @@ const MonacoEditor = () => {
   useEffect(() => {
     return () => {
       debouncedSave.cancel();
+      debouncedDiffSave.cancel();
     };
-  }, [debouncedSave]);
+  }, [debouncedSave, debouncedDiffSave]);
 
   // Clear remote cursors and locked lines when switching files
   useEffect(() => {
@@ -797,8 +843,23 @@ const MonacoEditor = () => {
 
   const language = activeFile ? getLanguageFromFileName(activeFile.name) : "plaintext";
 
-  // Show placeholder when no file is open
-  if (!activeFileId || !activeFile) {
+  if (isGitDiffActive && activeGitDiffTab) {
+    return (
+      <div className="flex h-full w-full flex-col">
+        <GitDiffEditor
+          key={activeEditorTabId}
+          filePath={activeGitDiffTab.filePath}
+          original={activeGitDiffTab.original}
+          modified={activeGitDiffTab.modified}
+          readOnly={isReadOnly}
+          onModifiedChange={handleGitDiffModifiedChange}
+        />
+      </div>
+    );
+  }
+
+  // Show placeholder when no file tab is open
+  if (!isRegularFileTabActive || !activeFileId || !activeFile) {
     return (
       <div className="h-full w-full flex items-center justify-center text-[#8D8D98]">
         <div className="text-center">

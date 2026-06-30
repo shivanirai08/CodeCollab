@@ -16,6 +16,7 @@ import {
 import { fetchGitStatus, fetchProject } from "@/store/ProjectSlice";
 import {
   fetchNodes,
+  openGitDiffTab,
   setActiveFile,
   updateLocalContent,
 } from "@/store/NodesSlice";
@@ -347,40 +348,6 @@ export default function GitPanel({
     }
   };
 
-  const loadWorktreeContentIntoEditor = async (filePath, nodeId) => {
-    const normalizedPath = normalizeNodePath(filePath);
-    const isConflicted = conflictFiles.some(
-      (file) => normalizeNodePath(file.path) === normalizedPath
-    );
-
-    if (isConflicted) {
-      const response = await fetch(
-        `/api/project/${projectId}/git/diff?path=${encodeURIComponent(normalizedPath)}`,
-        { credentials: "same-origin", cache: "no-store" }
-      );
-      const result = await response.json().catch(() => ({}));
-
-      if (response.ok && result.diff) {
-        dispatch(updateLocalContent({ nodeId, content: result.diff }));
-        return;
-      }
-
-      throw new Error(result.error || "Failed to load conflicted file");
-    }
-
-    const response = await fetch(
-      `/api/project/${projectId}/file?path=${encodeURIComponent(normalizedPath)}`,
-      { credentials: "same-origin", cache: "no-store" }
-    );
-    const result = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      throw new Error(result.error || "Failed to load file from worktree");
-    }
-
-    dispatch(updateLocalContent({ nodeId, content: result.content || "" }));
-  };
-
   const openInEditor = async (filePath) => {
     const normalizedPath = normalizeNodePath(filePath);
     const nodeId = nodePathIndex.get(normalizedPath);
@@ -390,11 +357,45 @@ export default function GitPanel({
       return;
     }
 
+    const isConflicted = conflictFiles.some(
+      (file) => normalizeNodePath(file.path) === normalizedPath
+    );
+
     try {
-      // Load worktree content into Redux before activating the file so Monaco's
-      // initial defaultValue receives the on-disk version, not stale DB cache.
-      await loadWorktreeContentIntoEditor(normalizedPath, nodeId);
-      dispatch(setActiveFile(nodeId));
+      if (isConflicted) {
+        const response = await fetch(
+          `/api/project/${projectId}/git/diff?path=${encodeURIComponent(normalizedPath)}`,
+          { credentials: "same-origin", cache: "no-store" }
+        );
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok || !result.diff) {
+          throw new Error(result.error || "Failed to load conflicted file");
+        }
+
+        dispatch(updateLocalContent({ nodeId, content: result.diff }));
+        dispatch(setActiveFile(nodeId));
+        return;
+      }
+
+      const response = await fetch(
+        `/api/project/${projectId}/git/compare?path=${encodeURIComponent(normalizedPath)}`,
+        { credentials: "same-origin", cache: "no-store" }
+      );
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to load file diff");
+      }
+
+      dispatch(
+        openGitDiffTab({
+          nodeId,
+          filePath: normalizedPath,
+          original: result.original ?? "",
+          modified: result.modified ?? "",
+        })
+      );
     } catch (error) {
       toast.error(error.message || "Failed to open file in editor");
     }
