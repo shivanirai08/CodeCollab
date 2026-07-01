@@ -3,46 +3,59 @@
 import { useSelector, useDispatch } from "react-redux";
 import { cn } from "@/lib/utils";
 import { RxCross2 } from "react-icons/rx";
-import { setActiveFile, closeFile } from "@/store/NodesSlice";
+import {
+  setActiveEditorTab,
+  closeEditorTab,
+  closeFile,
+} from "@/store/NodesSlice";
+import { isGitDiffTabId } from "@/lib/editorTabs";
+import { AlertCircle, AlertTriangle } from "lucide-react";
 
 export default function EditorTabs({ onOpenProblems }) {
   const dispatch = useDispatch();
   const nodes = useSelector((state) => state.nodes.nodes);
-  const openFiles = useSelector((state) => state.nodes.openFiles);
-  const activeFileId = useSelector((state) => state.nodes.activeFileId);
+  const editorTabOrder = useSelector((state) => state.nodes.editorTabOrder);
+  const activeEditorTabId = useSelector((state) => state.nodes.activeEditorTabId);
+  const gitDiffTabsById = useSelector((state) => state.nodes.gitDiffTabsById);
   const fileProblems = useSelector((state) => state.nodes.fileProblems);
 
-  const openFileNodes = openFiles
-    .map((id) => nodes.find((n) => n.id === id))
-    .filter(Boolean);
-
-  const handleCloseFile = (e, fileId) => {
-    e.stopPropagation();
-    dispatch(closeFile(fileId));
-  };
-
-  if (openFileNodes.length === 0) {
-    return (
-      <></>
-    );
+  if (editorTabOrder.length === 0) {
+    return <></>;
   }
+
+  const handleCloseTab = (e, tabId) => {
+    e.stopPropagation();
+    if (isGitDiffTabId(tabId)) {
+      dispatch(closeEditorTab(tabId));
+      return;
+    }
+    dispatch(closeFile(tabId));
+  };
 
   return (
     <div className="flex items-center bg-white/2 overflow-x-auto rounded-t-sm">
-      {openFileNodes.map((file) => {
-        const problems = fileProblems[file.id] || [];
-        const errorCount = problems.filter(p => p.severity === "error").length;
-        const warningCount = problems.filter(p => p.severity === "warning").length;
+      {editorTabOrder.map((tabId) => {
+        const isDiffTab = isGitDiffTabId(tabId);
+        const diffTab = isDiffTab ? gitDiffTabsById[tabId] : null;
+        const nodeId = isDiffTab ? diffTab?.nodeId : tabId;
+        const file = nodes.find((n) => n.id === nodeId);
+
+        if (!file) return null;
+
+        const problems = fileProblems[nodeId] || [];
+        const errorCount = problems.filter((p) => p.severity === "error").length;
+        const warningCount = problems.filter((p) => p.severity === "warning").length;
 
         return (
           <Tab
-            key={file.id}
-            file={file}
-            active={file.id === activeFileId}
-            errorCount={errorCount}
-            warningCount={warningCount}
-            onClick={() => dispatch(setActiveFile(file.id))}
-            onClose={(e) => handleCloseFile(e, file.id)}
+            key={tabId}
+            label={isDiffTab ? `${file.name} (Diff)` : file.name}
+            active={tabId === activeEditorTabId}
+            isDiffTab={isDiffTab}
+            errorCount={isDiffTab ? 0 : errorCount}
+            warningCount={isDiffTab ? 0 : warningCount}
+            onClick={() => dispatch(setActiveEditorTab(tabId))}
+            onClose={(e) => handleCloseTab(e, tabId)}
             onErrorClick={onOpenProblems}
           />
         );
@@ -51,7 +64,16 @@ export default function EditorTabs({ onOpenProblems }) {
   );
 }
 
-function Tab({ file, active, errorCount, warningCount, onClick, onClose, onErrorClick }) {
+function Tab({
+  label,
+  active,
+  isDiffTab,
+  errorCount,
+  warningCount,
+  onClick,
+  onClose,
+  onErrorClick,
+}) {
   const hasErrors = errorCount > 0;
   const hasWarnings = warningCount > 0;
   const hasProblems = hasErrors || hasWarnings;
@@ -74,18 +96,35 @@ function Tab({ file, active, errorCount, warningCount, onClick, onClose, onError
       )}
     >
       <span className="flex items-center gap-2">
-        {file.name}
+        {label}
+        {isDiffTab ? (
+          <span className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#93c5fd] bg-[#172554]/80">
+            Diff
+          </span>
+        ) : null}
         {hasProblems && (
           <button
             onClick={handleErrorIndicatorClick}
-            className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 hover:bg-red-500/30 transition-all"
-            title={`${errorCount} error(s), ${warningCount} warning(s)`}
+            className="flex items-center gap-1 px-2 py-1 rounded-md font-semibold transition-all"
+            style={{
+              backgroundColor: hasErrors
+                ? "rgba(239, 68, 68, 0.15)"
+                : "rgba(202, 138, 4, 0.15)",
+              color: hasErrors ? "#FCA5A5" : "#FCD34D",
+            }}
+            title={`${errorCount} error${errorCount !== 1 ? "s" : ""}, ${warningCount} warning${warningCount !== 1 ? "s" : ""}`}
           >
             {hasErrors && (
-              <span className="text-red-400 font-bold">{errorCount}</span>
+              <div className="flex items-center gap-0.5">
+                <AlertCircle className="size-3.5 text-red-400" />
+                <span className="text-[11px] font-bold text-red-400">{errorCount}</span>
+              </div>
             )}
             {hasWarnings && (
-              <span className="text-yellow-400 font-bold">{warningCount}</span>
+              <div className="flex items-center gap-0.5">
+                <AlertTriangle className="size-3.5 text-yellow-400" />
+                <span className="text-[11px] font-bold text-yellow-400">{warningCount}</span>
+              </div>
             )}
           </button>
         )}
@@ -98,6 +137,9 @@ function Tab({ file, active, errorCount, warningCount, onClick, onClose, onError
       </button>
       {hasErrors && (
         <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-red-500" />
+      )}
+      {hasWarnings && !hasErrors && (
+        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-yellow-500" />
       )}
     </div>
   );

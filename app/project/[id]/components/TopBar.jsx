@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import SharePanel from "./SharePanel";
@@ -11,12 +11,15 @@ import useVoiceCall from "@/hooks/useVoiceCall";
 import useNotifications from "@/hooks/useNotifications";
 import NotificationBell from "@/components/ui/NotificationBell";
 import { toast } from "sonner";
+import { fetchProject, fetchGitStatus } from "@/store/ProjectSlice";
+import { fetchNodes, closeAllFiles } from "@/store/NodesSlice";
 import {
   GitBranch,
   Github,
   Menu,
   MessageSquare,
   SquareTerminal,
+  ChevronDown,
 } from "lucide-react";
 
 export default function TopBar({
@@ -29,6 +32,7 @@ export default function TopBar({
   onMenuClick,
   hasUnreadChat = false,
 }) {
+  const dispatch = useDispatch();
   const project = useSelector((state) => state.project);
   const onlineUsers = useSelector((state) => state.project.onlineUsers);
   const reduxUserId = useSelector((state) => state.user.id);
@@ -38,6 +42,9 @@ export default function TopBar({
   const gitStatus = useSelector((state) => state.project.gitStatus);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isRequestingAccess, setIsRequestingAccess] = useState(false);
+  const [isBranchSwitching, setIsBranchSwitching] = useState(false);
+  const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
+  const [branches, setBranches] = useState({ current: "", local: [], remote: [] });
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams();
@@ -74,6 +81,76 @@ export default function TopBar({
       setIsShareOpen(true);
     }
   }, [shouldOpenShareFromNotification]);
+
+  // Load branches when git panel opens
+  useEffect(() => {
+    if (isBranchMenuOpen && repository) {
+      const loadBranches = async () => {
+        try {
+          const res = await fetch(`/api/project/${projectId}/git/branches`, {
+            method: "GET",
+            credentials: "same-origin",
+          });
+          const data = await res.json();
+          if (res.ok) {
+            setBranches(data);
+          }
+        } catch (error) {
+          console.error("Failed to load branches:", error);
+        }
+      };
+      loadBranches();
+    }
+  }, [isBranchMenuOpen, repository, projectId]);
+
+  const handleCheckoutBranch = async (branch) => {
+    if (branch === repository?.currentBranch) {
+      setIsBranchMenuOpen(false);
+      return;
+    }
+
+    setIsBranchSwitching(true);
+    try {
+      const res = await fetch(`/api/project/${projectId}/git/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ branch }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to checkout branch");
+      }
+
+      const {
+        updatedCount = 0,
+        createdCount = 0,
+        deletedCount = 0,
+      } = data.mergeResult || {};
+      const summary = [];
+      if (updatedCount > 0) summary.push(`${updatedCount} files updated`);
+      if (createdCount > 0) summary.push(`${createdCount} files added`);
+      if (deletedCount > 0) summary.push(`${deletedCount} files removed`);
+
+      toast.success(
+        summary.length > 0
+          ? `Switched to "${data.branch || branch}": ${summary.join(", ")}`
+          : `Switched to branch "${data.branch || branch}"`
+      );
+
+      dispatch(closeAllFiles());
+      await dispatch(fetchProject(projectId));
+      await dispatch(fetchGitStatus(projectId));
+      await dispatch(fetchNodes(projectId));
+
+      setIsBranchMenuOpen(false);
+    } catch (error) {
+      toast.error(error.message || "Failed to checkout branch");
+    } finally {
+      setIsBranchSwitching(false);
+    }
+  };
 
   const currentUserId = reduxUserId || voiceUserId || "current-user";
   const projectJoinRequestAlertCount = useMemo(() => {
@@ -245,10 +322,78 @@ export default function TopBar({
                     <Github className="size-3" />
                     <span className="truncate">{repository.repoFullName}</span>
                   </span>
-                  <span className="hidden items-center gap-1 sm:inline-flex">
-                    <GitBranch className="size-3" />
-                    {repository.currentBranch}
-                  </span>
+                  {/* Branch switcher */}
+                  <div className="relative hidden sm:block">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-full border border-[#2B2B30] bg-[#17171D] px-2 py-1 transition-colors hover:border-[#3A3A42] hover:bg-[#1F1F27]"
+                      onClick={() => permissions.canEdit && setIsBranchMenuOpen((v) => !v)}
+                      title={permissions.canEdit ? "Switch branch" : "Current branch"}
+                    >
+                      <GitBranch className="size-3" />
+                      <span>{repository.currentBranch}</span>
+                      {permissions.canEdit && <ChevronDown className="size-3" />}
+                    </button>
+                    {isBranchMenuOpen && (
+                      <>
+                        {/* Backdrop */}
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() => setIsBranchMenuOpen(false)}
+                        />
+                        <div className="absolute left-0 top-full z-20 mt-1 min-w-[220px] rounded-xl border border-[#2B2B30] bg-[#18181E] p-1 shadow-lg">
+                          {isBranchSwitching && (
+                            <div className="px-3 py-2 text-xs text-[#8B909A]">Switching branch…</div>
+                          )}
+                          {!isBranchSwitching && (
+                            <>
+                              {branches.local.length > 0 && (
+                                <>
+                                  <p className="px-3 py-1 text-[10px] uppercase tracking-widest text-[#5A5A68]">Local</p>
+                                  {branches.local.map((b) => (
+                                    <button
+                                      key={`local-${b}`}
+                                      type="button"
+                                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                                        b === repository.currentBranch
+                                          ? "bg-[#25252D] text-white"
+                                          : "text-[#C9C9D6] hover:bg-[#1F1F27] hover:text-white"
+                                      }`}
+                                      onClick={() => handleCheckoutBranch(b)}
+                                    >
+                                      <GitBranch className="size-3 shrink-0" />
+                                      <span className="truncate">{b}</span>
+                                      {b === repository.currentBranch && (
+                                        <span className="ml-auto text-[10px] text-[#34D399]">current</span>
+                                      )}
+                                    </button>
+                                  ))}
+                                </>
+                              )}
+                              {branches.remote.length > 0 && (
+                                <>
+                                  <p className="mt-1 px-3 py-1 text-[10px] uppercase tracking-widest text-[#5A5A68]">Remote</p>
+                                  {branches.remote
+                                    .filter((b) => !branches.local.includes(b))
+                                    .map((b) => (
+                                      <button
+                                        key={`remote-${b}`}
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-[#C9C9D6] transition-colors hover:bg-[#1F1F27] hover:text-white"
+                                        onClick={() => handleCheckoutBranch(b)}
+                                      >
+                                        <GitBranch className="size-3 shrink-0 text-[#5A5A68]" />
+                                        <span className="truncate">{b}</span>
+                                      </button>
+                                    ))}
+                                </>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
                   <span className="hidden md:inline">{gitStatus?.isClean ? "Clean working tree" : "Uncommitted changes"}</span>
                 </>
               ) : (

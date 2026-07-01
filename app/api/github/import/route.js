@@ -3,10 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getInternalBackendHeaders } from "@/lib/projectRepository";
 
-const backendUrl =
+const backendUrl = (
   process.env.CODECOLLAB_BACKEND_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
-  "http://localhost:5000";
+  "http://localhost:5000"
+).replace(/\/$/, "");
 
 function normalizeBackendError(errorValue) {
   if (!errorValue) {

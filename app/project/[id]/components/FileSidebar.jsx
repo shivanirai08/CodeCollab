@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { getConflictFilesFromGitStatus } from "@/lib/gitStatus";
 import {
   HiOutlineFolder,
   HiOutlineDocumentText,
@@ -238,12 +239,13 @@ export default function FileSidebar({ className, mobileOpen, onClose, desktopWid
 
   const tree = buildTree();
   const gitStatusByNodeId = useMemo(() => {
-    const files = gitStatus?.files || [];
+    const conflictFiles = getConflictFilesFromGitStatus(gitStatus);
 
-    if (files.length === 0 || nodes.length === 0) {
+    if (conflictFiles.length === 0 && nodes.length === 0) {
       return {};
     }
 
+    const files = gitStatus?.files || [];
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
     const pathCache = new Map();
 
@@ -259,6 +261,9 @@ export default function FileSidebar({ className, mobileOpen, onClose, desktopWid
     };
 
     const statusByPath = new Map(files.map((file) => [file.path, file.status]));
+    for (const file of conflictFiles) {
+      statusByPath.set(file.path, "conflicted");
+    }
 
     return nodes.reduce((acc, node) => {
       if (node.type !== "file") {
@@ -372,7 +377,9 @@ export default function FileSidebar({ className, mobileOpen, onClose, desktopWid
                   collapsed={collapsed}
                   open={openFolders.has(item.id)}
                   onToggle={toggleFolder}
-                  onFileClick={(fileId) => dispatch(setActiveFile(fileId))}
+                  onFileClick={(fileId) => {
+                    dispatch(setActiveFile(fileId));
+                  }}
                   activeFileId={activeFileId}
                   onContextMenu={handleContextMenu}
                   onAddFile={handleAddFile}
@@ -393,7 +400,9 @@ export default function FileSidebar({ className, mobileOpen, onClose, desktopWid
                   file={item}
                   collapsed={collapsed}
                   active={item.id === activeFileId}
-                  onClick={() => dispatch(setActiveFile(item.id))}
+                  onClick={() => {
+                    dispatch(setActiveFile(item.id));
+                  }}
                   onContextMenu={handleContextMenu}
                   gitStatus={gitStatusByNodeId[item.id] || null}
                 />

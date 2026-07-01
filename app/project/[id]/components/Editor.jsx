@@ -1,15 +1,32 @@
 "use client";
 
-import React, { useEffect, useRef, useCallback, useState } from "react";
+import React, { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import Editor, { useMonaco } from "@monaco-editor/react";
+import GitDiffEditor from "./GitDiffEditor";
 import { useSelector, useDispatch } from "react-redux";
-import { updateLocalContent, updateFileContent, updateRemoteCursor, removeRemoteCursor, clearRemoteCursorsForFile, lockLine, unlockLine, unlockUserLines, clearLockedLinesForFile } from "@/store/NodesSlice";
+import { updateLocalContent, updateFileContent, updateGitDiffTabModified, updateRemoteCursor, removeRemoteCursor, clearRemoteCursorsForFile, lockLine, unlockLine, unlockUserLines, clearLockedLinesForFile } from "@/store/NodesSlice";
+import { isGitDiffTabId } from "@/lib/editorTabs";
 import { debounce } from "lodash";
 import { toast } from "sonner";
 import useCollaborativeEditing from "@/hooks/useCollaborativeEditing";
 import useRemoteCursors from "@/hooks/useRemoteCursors";
 import useLineLocks from "@/hooks/useLineLocks";
 import { useParams } from "next/navigation";
+import { fetchGitStatus } from "@/store/ProjectSlice";
+import { isPathConflicted } from "@/lib/gitStatus";
+
+function resolveNodePath(nodes, nodeId) {
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const segments = [];
+  let current = nodeMap.get(nodeId);
+
+  while (current) {
+    segments.unshift(current.name);
+    current = current.parent_id ? nodeMap.get(current.parent_id) : null;
+  }
+
+  return segments.join("/");
+}
 
 /**
  * parseConflictBlocks(text)
@@ -83,6 +100,8 @@ const MonacoEditor = () => {
   const params = useParams();
   const projectId = params.id;
   const [versionCounter, setVersionCounter] = useState(0);
+  const [conflictBlockCount, setConflictBlockCount] = useState(0);
+  const [isStagingResolution, setIsStagingResolution] = useState(false);
   const currentLockedLineRef = useRef(null);
   const lockTimeoutRef = useRef(null);
   const contentChangeDisposableRef = useRef(null);
@@ -97,10 +116,14 @@ const MonacoEditor = () => {
   const conflictCommandsRef = useRef({ current: null, incoming: null, both: null }); // Monaco command IDs
   const conflictDecorationsRef = useRef(null); // IEditorDecorationsCollection
 
+  const activeEditorTabId = useSelector((state) => state.nodes.activeEditorTabId);
   const activeFileId = useSelector((state) => state.nodes.activeFileId);
+  const gitDiffTabsById = useSelector((state) => state.nodes.gitDiffTabsById);
   const nodes = useSelector((state) => state.nodes.nodes);
   const fileContents = useSelector((state) => state.nodes.fileContents);
   const permissions = useSelector((state) => state.project.permissions);
+  const gitStatus = useSelector((state) => state.project.gitStatus);
+  const currentBranch = useSelector((state) => state.project.repository?.currentBranch);
   const remoteCursors = useSelector((state) => state.nodes.remoteCursors[activeFileId] || {});
   const lockedLines = useSelector((state) => state.nodes.lockedLines[activeFileId] || {});
   const isReadOnly = !permissions.canEdit;
@@ -108,6 +131,13 @@ const MonacoEditor = () => {
   // Get active file details
   const activeFile = nodes.find((n) => n.id === activeFileId);
   const content = activeFileId ? fileContents[activeFileId] || "" : "";
+  const activeFilePath = useMemo(
+    () => resolveNodePath(nodes, activeFileId),
+    [nodes, activeFileId]
+  );
+  const isActiveFileConflicted = Boolean(
+    activeFilePath && isPathConflicted(gitStatus, activeFilePath)
+  );
 
   // Collaborative editing callbacks
   const handleRemoteContentChange = useCallback((data) => {
@@ -227,6 +257,14 @@ const MonacoEditor = () => {
   const currentUserId = useSelector((state) => state.user.id);
   const currentUsername = useSelector((state) => state.user.userName);
 
+  const isGitDiffActive = Boolean(
+    activeEditorTabId && isGitDiffTabId(activeEditorTabId)
+  );
+  const activeGitDiffTab = isGitDiffActive ? gitDiffTabsById[activeEditorTabId] : null;
+  const isRegularFileTabActive = Boolean(
+    activeEditorTabId && !isGitDiffTabId(activeEditorTabId)
+  );
+
   // Collaborative editing hook - enabled for both view and edit users
   // View-only users can receive updates but cannot broadcast
   const collaborativeEditing = useCollaborativeEditing(projectId, activeFileId, {
@@ -235,23 +273,67 @@ const MonacoEditor = () => {
     onLineLock: handleLineLock,
     onLineUnlock: handleLineUnlock,
     onUserLeaveFile: handleUserLeaveFile,
-    enabled: (permissions.canView || permissions.canEdit) && !!activeFileId && !!currentUserId,
+    enabled:
+      (permissions.canView || permissions.canEdit) &&
+      !!activeFileId &&
+      !!currentUserId &&
+      isRegularFileTabActive,
     canBroadcast: permissions.canEdit, // Only users with edit permission can broadcast
   });
 
   const { broadcastContentChange, broadcastCursorPosition, broadcastLineLock, broadcastLineUnlock, isApplyingRemoteChange } = collaborativeEditing;
 
 
-  // Debounced save to database
+  // Debounced save to database AND disk (autosave)
   const debouncedSave = useCallback(
-    debounce((nodeId, content) => {
+    debounce(async (nodeId, content) => {
       if (!permissions.canEdit) return;
-      dispatch(updateFileContent({ nodeId, content, projectId }));
+
+      try {
+        // Update in database (also syncs worktree via nodes PATCH)
+        const saveTask = dispatch(updateFileContent({ nodeId, content, projectId }));
+
+        const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+        const resolveRelativePath = (id) => {
+          const segments = [];
+          let cur = nodeMap.get(id);
+          while (cur) {
+            segments.unshift(cur.name);
+            cur = cur.parent_id ? nodeMap.get(cur.parent_id) : null;
+          }
+          return segments.join("/");
+        };
+
+        const relativePath = resolveRelativePath(nodeId);
+        if (relativePath) {
+          const diskResponse = await fetch(`/api/project/${projectId}/file`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ filePath: relativePath, content }),
+          });
+
+          if (!diskResponse.ok) {
+            const diskResult = await diskResponse.json().catch(() => ({}));
+            console.warn("Autosave to disk failed:", diskResult.error || diskResponse.statusText);
+          }
+        }
+
+        const saveResult = await saveTask.unwrap().catch((error) => {
+          toast.error(error || "Failed to save file");
+          throw error;
+        });
+
+        void saveResult;
+      } catch (error) {
+        if (!error?.message && typeof error !== "string") {
+          console.error("Failed to save file:", error);
+        }
+      }
     }, 2000),
-    [dispatch, permissions.canEdit, projectId]
+    [dispatch, permissions.canEdit, projectId, nodes]
   );
 
-  // Handle editor content change
   const handleEditorChange = (value) => {
     if (!activeFileId || !permissions.canEdit) return;
 
@@ -277,6 +359,36 @@ const MonacoEditor = () => {
     }
   };
 
+  const debouncedDiffSave = useCallback(
+    debounce(async (filePath, content) => {
+      if (!permissions.canEdit || !filePath) return;
+
+      try {
+        const diskResponse = await fetch(`/api/project/${projectId}/file`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ filePath, content }),
+        });
+
+        if (!diskResponse.ok) {
+          const diskResult = await diskResponse.json().catch(() => ({}));
+          console.warn("Diff autosave to disk failed:", diskResult.error || diskResponse.statusText);
+        }
+      } catch (error) {
+        console.error("Failed to save diff changes:", error);
+      }
+    }, 2000),
+    [permissions.canEdit, projectId]
+  );
+
+  const handleGitDiffModifiedChange = (value) => {
+    if (!activeEditorTabId || !permissions.canEdit || !isGitDiffActive || !activeGitDiffTab) return;
+
+    dispatch(updateGitDiffTabModified({ tabId: activeEditorTabId, modified: value }));
+    debouncedDiffSave(activeGitDiffTab.filePath, value);
+  };
+
   const handleReadOnlyAttempt = () => {
     if (isReadOnly) {
       toast.error("You don't have permission to edit this file");
@@ -287,8 +399,9 @@ const MonacoEditor = () => {
   useEffect(() => {
     return () => {
       debouncedSave.cancel();
+      debouncedDiffSave.cancel();
     };
-  }, [debouncedSave]);
+  }, [debouncedSave, debouncedDiffSave]);
 
   // Clear remote cursors and locked lines when switching files
   useEffect(() => {
@@ -580,6 +693,7 @@ const MonacoEditor = () => {
     // Apply initial decorations for conflict markers already present in the file.
     const initialBlocks = parseConflictBlocks(content);
     conflictBlocksRef.current = initialBlocks;
+    setConflictBlockCount(initialBlocks.length);
     applyConflictDecorationsToEditor(editor, initialBlocks, conflictDecorationsRef);
     // ────────────────────────────────────────────────────────────────────────
   };
@@ -623,8 +737,76 @@ const MonacoEditor = () => {
     if (!editor || !activeFileId) return;
     const blocks = parseConflictBlocks(content);
     conflictBlocksRef.current = blocks;
+    setConflictBlockCount(blocks.length);
     applyConflictDecorationsToEditor(editor, blocks, conflictDecorationsRef);
   }, [content, activeFileId]);
+
+  // Keep Monaco in sync when Redux content is updated externally (e.g. git panel
+  // worktree load). defaultValue only applies on mount, so without this the
+  // editor can stay empty/stale after setActiveFile.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !activeFileId) return;
+
+    const model = editor.getModel();
+    if (!model) return;
+
+    const editorValue = model.getValue();
+    if (editorValue === content) {
+      currentContentRef.current = content;
+      return;
+    }
+
+    if (isApplyingRemoteChange()) {
+      return;
+    }
+
+    isLocalChangeRef.current = false;
+    model.pushEditOperations(
+      [],
+      [{ range: model.getFullModelRange(), text: content }],
+      () => null
+    );
+    currentContentRef.current = content;
+  }, [content, activeFileId, isApplyingRemoteChange]);
+
+  const stageResolvedConflict = async () => {
+    if (!activeFileId || !activeFilePath || conflictBlockCount > 0) return;
+
+    setIsStagingResolution(true);
+    debouncedSave.cancel();
+
+    try {
+      const saveResponse = await fetch(`/api/project/${projectId}/file`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ filePath: activeFilePath, content }),
+      });
+      const saveResult = await saveResponse.json().catch(() => ({}));
+      if (!saveResponse.ok) {
+        throw new Error(saveResult.error || "Failed to save resolved file");
+      }
+
+      const stageResponse = await fetch(`/api/project/${projectId}/git/stage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ paths: [activeFilePath] }),
+      });
+      const stageResult = await stageResponse.json().catch(() => ({}));
+      if (!stageResponse.ok) {
+        throw new Error(stageResult.error || "Failed to stage resolved file");
+      }
+
+      await dispatch(fetchGitStatus(projectId));
+      toast.success(`${activeFilePath} resolved and staged`);
+    } catch (error) {
+      toast.error(error.message || "Failed to stage resolved file");
+    } finally {
+      setIsStagingResolution(false);
+    }
+  };
 
   // Get language from file extension
   const getLanguageFromFileName = (fileName) => {
@@ -661,8 +843,23 @@ const MonacoEditor = () => {
 
   const language = activeFile ? getLanguageFromFileName(activeFile.name) : "plaintext";
 
-  // Show placeholder when no file is open
-  if (!activeFileId || !activeFile) {
+  if (isGitDiffActive && activeGitDiffTab) {
+    return (
+      <div className="flex h-full w-full flex-col">
+        <GitDiffEditor
+          key={activeEditorTabId}
+          filePath={activeGitDiffTab.filePath}
+          original={activeGitDiffTab.original}
+          modified={activeGitDiffTab.modified}
+          readOnly={isReadOnly}
+          onModifiedChange={handleGitDiffModifiedChange}
+        />
+      </div>
+    );
+  }
+
+  // Show placeholder when no file tab is open
+  if (!isRegularFileTabActive || !activeFileId || !activeFile) {
     return (
       <div className="h-full w-full flex items-center justify-center text-[#8D8D98]">
         <div className="text-center">
@@ -678,9 +875,30 @@ const MonacoEditor = () => {
   }
 
   return (
-    <div className="h-full w-full relative">
+    <div className="flex h-full w-full flex-col">
+      {(isActiveFileConflicted || conflictBlockCount > 0) && (
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#4B242C] bg-[#1A0C10] px-4 py-2">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[#F9CFD6]">Resolve merge conflict</p>
+            <p className="text-xs text-[#D9A7AF]">
+              {conflictBlockCount > 0
+                ? `${conflictBlockCount} conflict block${conflictBlockCount === 1 ? "" : "s"} remaining. Use the actions above each block.`
+                : "All conflict markers are resolved. Stage this file to finish."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={stageResolvedConflict}
+            disabled={conflictBlockCount > 0 || isStagingResolution || !permissions.canEdit}
+            className="shrink-0 rounded-md border border-[#365D46] bg-[#173322] px-3 py-1.5 text-xs font-medium text-[#A7F3D0] transition-colors hover:bg-[#20452E] disabled:cursor-not-allowed disabled:border-[#3A3033] disabled:bg-[#21171A] disabled:text-[#806D72]"
+          >
+            {isStagingResolution ? "Staging..." : "Stage resolved file"}
+          </button>
+        </div>
+      )}
+      <div className="relative min-h-0 flex-1">
       <Editor
-        key={activeFileId} // Force remount when switching files
+        key={`${activeFileId}-${currentBranch || "none"}`}
         height="100%"
         language={language}
         defaultValue={content} // Use defaultValue instead of value for uncontrolled component
@@ -737,6 +955,7 @@ const MonacoEditor = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
