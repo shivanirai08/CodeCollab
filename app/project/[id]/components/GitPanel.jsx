@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -97,6 +97,7 @@ export default function GitPanel({
   const [actionLoading, setActionLoading] = useState(null);
   const [panelWidth, setPanelWidth] = useState(520);
   const [isResizing, setIsResizing] = useState(false);
+  const panelRef = useRef(null);
   const [githubRepos, setGithubRepos] = useState([]);
   const [githubConnected, setGithubConnected] = useState(false);
   const [isLoadingRepos, setIsLoadingRepos] = useState(false);
@@ -182,7 +183,8 @@ export default function GitPanel({
   useEffect(() => {
     if (isResizing) {
       const onMouseMove = (event) => {
-        const nextWidth = window.innerWidth - event.clientX;
+        const panelRight = panelRef.current?.getBoundingClientRect().right ?? window.innerWidth;
+        const nextWidth = panelRight - event.clientX;
         const clampedWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, nextWidth));
         setPanelWidth(clampedWidth);
       };
@@ -555,9 +557,10 @@ export default function GitPanel({
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={onClose} />
+      <div className="fixed inset-0 z-40 bg-black/40 xl:hidden" onClick={onClose} />
       <aside
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[92vw] flex-col border-l border-[#2A2A30] bg-[#0E0E12] text-[#E6E6EC] shadow-2xl lg:relative lg:inset-auto lg:z-auto lg:max-w-none lg:rounded-sm lg:border"
+        ref={panelRef}
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[92vw] shrink-0 flex-col border-l border-[#2A2A30] bg-[#0E0E12] text-[#E6E6EC] shadow-2xl xl:relative xl:inset-auto xl:z-auto xl:max-w-[45%] xl:rounded-sm xl:border"
         style={{ width: repository ? `${panelWidth}px` : "min(100vw, 520px)" }}
       >
         {repository ? (
@@ -565,7 +568,7 @@ export default function GitPanel({
             <button
               type="button"
               aria-label="Resize source control panel"
-              className="absolute left-0 top-0 hidden h-full w-1 -translate-x-1/2 cursor-col-resize bg-transparent hover:bg-[#9CA3AF]/30 lg:block"
+              className="absolute left-0 top-0 hidden h-full w-1 -translate-x-1/2 cursor-col-resize bg-transparent hover:bg-[#9CA3AF]/30 xl:block"
               onMouseDown={() => setIsResizing(true)}
             />
 

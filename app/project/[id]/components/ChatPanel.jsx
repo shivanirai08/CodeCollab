@@ -29,6 +29,7 @@ export default function ChatPanel({
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, messageId: null,});
   const [panelWidth, setPanelWidth] = useState(desktopWidth);
   const [isResizing, setIsResizing] = useState(false);
+  const panelRef = useRef(null);
   const messagesEndRef = useRef(null);
   const hasLoadedMessages = useRef(false);
   const processedMessageIds = useRef(new Set());
@@ -49,7 +50,8 @@ export default function ChatPanel({
     }
 
     const handleMouseMove = (event) => {
-      const nextWidth = window.innerWidth - event.clientX;
+      const panelRight = panelRef.current?.getBoundingClientRect().right ?? window.innerWidth;
+      const nextWidth = panelRight - event.clientX;
       const clampedWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, nextWidth));
       setPanelWidth(clampedWidth);
     };
@@ -237,13 +239,16 @@ export default function ChatPanel({
 
       {/* Chat Panel */}
       <div
+        ref={panelRef}
         className={cn(
-          "flex shrink-0 flex-col overflow-hidden rounded-t-3xl bg-[#19191F] transition-all duration-300 lg:rounded-sm lg:border lg:border-[#24242A]",
-          "hidden h-full lg:flex",
-          isChatOpen ? cn(desktopClassName, "lg:w-[var(--chat-panel-width)]") : "lg:w-0",
-          "fixed bottom-0 left-0 right-0 z-50 lg:relative lg:inset-auto",
-          isChatOpen ? "flex" : "hidden lg:flex",
-          isExpanded ? "h-[90vh]" : "h-[50vh] md:h-full"
+          "flex shrink-0 flex-col overflow-hidden rounded-t-3xl bg-[#19191F] transition-[width] duration-300 xl:max-w-[45%] xl:rounded-sm xl:border xl:border-[#24242A]",
+          "h-full",
+          isChatOpen ? "flex" : "hidden xl:flex",
+          isChatOpen && "fixed bottom-0 left-0 right-0 z-50 xl:relative xl:inset-auto xl:z-auto",
+          isChatOpen
+            ? cn(desktopClassName, "xl:w-[var(--chat-panel-width)]")
+            : "xl:w-0",
+          isChatOpen && (isExpanded ? "h-[90vh] xl:h-full" : "h-[50vh] md:h-full xl:h-full")
         )}
         style={
           isChatOpen
@@ -255,7 +260,7 @@ export default function ChatPanel({
           <button
             type="button"
             aria-label="Resize chat panel"
-            className="absolute left-0 top-0 hidden h-full w-1 -translate-x-1/2 cursor-col-resize bg-transparent hover:bg-[#9CA3AF]/30 lg:block"
+            className="absolute left-0 top-0 hidden h-full w-1 -translate-x-1/2 cursor-col-resize bg-transparent hover:bg-[#9CA3AF]/30 xl:block"
             onMouseDown={() => setIsResizing(true)}
           />
         ) : null}

@@ -295,7 +295,7 @@ export default function ProjectWorkspacePage() {
   const showInlineGitPanel = isGitOpen;
   const showInlineChatPanel = isChatOpen && (canShowDualPanels || !showInlineGitPanel);
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen overflow-hidden bg-background">
       <FileSidebar
         desktopWidth={fileSidebarWidth}
         mobileOpen={mobileFileSidebarOpen}
@@ -309,7 +309,7 @@ export default function ProjectWorkspacePage() {
         onMouseDown={() => setActiveResizeHandle("sidebar")}
       />
 
-      <main className="flex-1 overflow-hidden pb-2">
+      <main className="min-w-0 flex-1 overflow-hidden pb-2">
         <div className="flex h-full flex-col">
           <TopBar
             onToggleGit={handleToggleGit}
@@ -323,8 +323,8 @@ export default function ProjectWorkspacePage() {
           />
 
           <div className="mx-2 mt-2 flex min-h-0 flex-1 flex-col gap-2 md:mx-4">
-            <div className="flex min-h-0 flex-1 gap-2">
-              <div className="flex min-h-0 flex-1 flex-col rounded-sm border border-[#24242A] bg-[#121217]">
+            <div className="flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-sm border border-[#24242A] bg-[#121217]">
                 <div className="mb-2 flex min-w-0 items-center gap-2 overflow-x-auto border-b border-[#36363E] px-2 pt-2 md:px-3">
                   <EditorTabs onOpenProblems={() => openBottomTray("problems")} />
                   <div className="ml-auto flex items-center gap-2 pb-2">
