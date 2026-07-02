@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { showLoader, hideLoader } from "./LoadingSlice";
+import { normalizeGitActionError } from "@/lib/gitActionErrors";
 
 const initialState = {
   projectid: "",
@@ -15,6 +16,7 @@ const initialState = {
   gitStatus: null,
   gitStatusLoading: false,
   gitStatusError: null,
+  gitStatusIssue: null,
   permissions: {
     canEdit: false,
     canView: false,
@@ -156,12 +158,14 @@ export const fetchGitStatus = createAsyncThunk(
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to fetch git status");
+        return rejectWithValue(normalizeGitActionError(data, "status"));
       }
 
       return data;
     } catch (error) {
-      return rejectWithValue(error.message);
+      return rejectWithValue(
+        normalizeGitActionError({ error: error.message }, "status")
+      );
     }
   }
 );
@@ -184,6 +188,7 @@ const projectSlice = createSlice({
       state.gitStatus = null;
       state.gitStatusLoading = false;
       state.gitStatusError = null;
+      state.gitStatusIssue = null;
       state.permissions = {
         canEdit: false,
         canView: false,
@@ -346,15 +351,22 @@ const projectSlice = createSlice({
       .addCase(fetchGitStatus.pending, (state) => {
         state.gitStatusLoading = true;
         state.gitStatusError = null;
+        state.gitStatusIssue = null;
       })
       .addCase(fetchGitStatus.fulfilled, (state, action) => {
         state.gitStatusLoading = false;
         state.gitStatus = action.payload;
         state.gitStatusError = null;
+        state.gitStatusIssue = null;
       })
       .addCase(fetchGitStatus.rejected, (state, action) => {
         state.gitStatusLoading = false;
-        state.gitStatusError = action.payload || "Failed to fetch git status";
+        const issue =
+          action.payload && typeof action.payload === "object"
+            ? action.payload
+            : normalizeGitActionError({ error: action.payload }, "status");
+        state.gitStatusIssue = issue;
+        state.gitStatusError = issue.error || "Failed to fetch git status";
       });
   },
 });

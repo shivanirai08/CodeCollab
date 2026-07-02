@@ -13,6 +13,8 @@ import TopBar from "./components/TopBar";
 import EditorTabs from "./components/EditorTabs";
 import AccessDeniedModal from "./components/AccessDeniedModal";
 import RemovedFromProjectModal from "./components/RemovedFromProjectModal";
+import GitRepositoryUnavailableModal from "./components/GitRepositoryUnavailableModal";
+import { isRepositoryUnavailableIssue } from "@/lib/gitActionErrors";
 import { useParams, useSearchParams } from "next/navigation";
 import useRealtimeNodes from "@/hooks/useRealtimeNodes";
 import useRealtimePresence from "@/hooks/useRealtimePresence";
@@ -56,6 +58,8 @@ export default function ProjectWorkspacePage() {
   const projectStatus = useSelector((state) => state.project.status);
   const projectError = useSelector((state) => state.project.error);
   const accessState = useSelector((state) => state.project.accessState);
+  const gitStatusIssue = useSelector((state) => state.project.gitStatusIssue);
+  const gitStatusLoading = useSelector((state) => state.project.gitStatusLoading);
   const currentUserId = useSelector((state) => state.user.id);
 
   const [isGitOpen, setIsGitOpen] = useState(false);
@@ -71,6 +75,16 @@ export default function ProjectWorkspacePage() {
   const [fileSidebarWidth, setFileSidebarWidth] = useState(288);
   const [terminalHeight, setTerminalHeight] = useState(320);
   const [activeResizeHandle, setActiveResizeHandle] = useState(null);
+  const [showGitUnavailableModal, setShowGitUnavailableModal] = useState(false);
+
+  useEffect(() => {
+    if (gitStatusIssue && isRepositoryUnavailableIssue(gitStatusIssue)) {
+      setShowGitUnavailableModal(true);
+      return;
+    }
+
+    setShowGitUnavailableModal(false);
+  }, [gitStatusIssue]);
 
   const openBottomTray = (tab) => {
     setIsTerminalOpen(true);
@@ -296,6 +310,18 @@ export default function ProjectWorkspacePage() {
   const showInlineChatPanel = isChatOpen && (canShowDualPanels || !showInlineGitPanel);
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      <GitRepositoryUnavailableModal
+        isOpen={showGitUnavailableModal && Boolean(gitStatusIssue)}
+        issue={gitStatusIssue}
+        isRetrying={gitStatusLoading}
+        onClose={() => setShowGitUnavailableModal(false)}
+        onRetry={() => dispatch(fetchGitStatus(projectId))}
+        onOpenGitPanel={() => {
+          setShowGitUnavailableModal(false);
+          setIsGitOpen(true);
+        }}
+      />
+
       <FileSidebar
         desktopWidth={fileSidebarWidth}
         mobileOpen={mobileFileSidebarOpen}
@@ -320,6 +346,7 @@ export default function ProjectWorkspacePage() {
             isTerminalOpen={isTerminalOpen}
             onMenuClick={() => setMobileFileSidebarOpen(true)}
             hasUnreadChat={hasUnreadChat}
+            onShowGitUnavailable={() => setShowGitUnavailableModal(true)}
           />
 
           <div className="mx-2 mt-2 flex min-h-0 flex-1 flex-col gap-2 md:mx-4">
@@ -355,6 +382,7 @@ export default function ProjectWorkspacePage() {
                 projectId={projectId}
                 isOpen={showInlineGitPanel}
                 onClose={() => setIsGitOpen(false)}
+                onShowRepositoryUnavailable={() => setShowGitUnavailableModal(true)}
               />
 
               <ChatPanel

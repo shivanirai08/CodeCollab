@@ -13,6 +13,7 @@ import NotificationBell from "@/components/ui/NotificationBell";
 import { toast } from "sonner";
 import { fetchProject, fetchGitStatus } from "@/store/ProjectSlice";
 import { fetchNodes, closeAllFiles } from "@/store/NodesSlice";
+import { isRepositoryUnavailableIssue } from "@/lib/gitActionErrors";
 import {
   GitBranch,
   Github,
@@ -32,6 +33,7 @@ export default function TopBar({
   isTerminalOpen,
   onMenuClick,
   hasUnreadChat = false,
+  onShowGitUnavailable,
 }) {
   const dispatch = useDispatch();
   const project = useSelector((state) => state.project);
@@ -41,6 +43,7 @@ export default function TopBar({
   const accessState = useSelector((state) => state.project.accessState);
   const repository = useSelector((state) => state.project.repository);
   const gitStatus = useSelector((state) => state.project.gitStatus);
+  const gitStatusIssue = useSelector((state) => state.project.gitStatusIssue);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isRequestingAccess, setIsRequestingAccess] = useState(false);
   const [isBranchSwitching, setIsBranchSwitching] = useState(false);
@@ -429,7 +432,19 @@ export default function TopBar({
                       </>
                     )}
                   </div>
-                  <span className="hidden md:inline">{gitStatus?.isClean ? "Clean working tree" : "Uncommitted changes"}</span>
+                  {isRepositoryUnavailableIssue(gitStatusIssue) ? (
+                    <button
+                      type="button"
+                      className="hidden md:inline text-[#FCA5A5] transition-colors hover:text-[#FECACA] hover:underline"
+                      onClick={onShowGitUnavailable}
+                    >
+                      Git sync unavailable
+                    </button>
+                  ) : (
+                    <span className="hidden md:inline">
+                      {gitStatus?.isClean ? "Clean working tree" : "Uncommitted changes"}
+                    </span>
+                  )}
                 </>
               ) : (
                 <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-[#2B2B30] bg-[#141419] px-2 py-1">

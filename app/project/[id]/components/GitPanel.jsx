@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import GitHubImportModal from "@/components/ui/GitHubImportModal";
 import {
   getGitSuggestedActionLabel,
+  isRepositoryUnavailableIssue,
   normalizeGitActionError,
 } from "@/lib/gitActionErrors";
 import {
@@ -84,12 +85,14 @@ export default function GitPanel({
   projectId,
   isOpen,
   onClose,
+  onShowRepositoryUnavailable,
 }) {
   const dispatch = useDispatch();
   const repository = useSelector((state) => state.project.repository);
   const permissions = useSelector((state) => state.project.permissions);
   const gitStatus = useSelector((state) => state.project.gitStatus);
   const gitStatusLoading = useSelector((state) => state.project.gitStatusLoading);
+  const gitStatusIssue = useSelector((state) => state.project.gitStatusIssue);
   const gitStatusError = useSelector((state) => state.project.gitStatusError);
   const nodes = useSelector((state) => state.nodes.nodes || []);
 
@@ -716,17 +719,34 @@ export default function GitPanel({
             <div className="min-h-0 flex-1 overflow-y-auto">
                 {gitStatusError ? (
                   <div className="mx-3 mt-3 rounded-2xl border border-[#4B242C] bg-[#231216] p-3">
-                    <p className="text-sm font-semibold text-[#FDE2E4]">Could not load git status</p>
+                    <p className="text-sm font-semibold text-[#FDE2E4]">
+                      {gitStatusIssue?.title || "Could not load git status"}
+                    </p>
                     <p className="mt-1 text-sm text-[#F6BCC4]">{gitStatusError}</p>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="mt-2 h-8 border border-[#6B2F3A] bg-[#30181D] px-3 text-[#FFE2E7] hover:bg-[#3A1D24] hover:text-white"
-                      onClick={() => dispatch(fetchGitStatus(projectId))}
-                      disabled={gitStatusLoading}
-                    >
-                      {gitStatusLoading ? <Loader2 className="size-4 animate-spin" /> : "Retry"}
-                    </Button>
+                    {gitStatusIssue?.hint ? (
+                      <p className="mt-2 text-xs leading-relaxed text-[#E7A1AB]">{gitStatusIssue.hint}</p>
+                    ) : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 border border-[#6B2F3A] bg-[#30181D] px-3 text-[#FFE2E7] hover:bg-[#3A1D24] hover:text-white"
+                        onClick={() => dispatch(fetchGitStatus(projectId))}
+                        disabled={gitStatusLoading}
+                      >
+                        {gitStatusLoading ? <Loader2 className="size-4 animate-spin" /> : "Retry"}
+                      </Button>
+                      {isRepositoryUnavailableIssue(gitStatusIssue) && onShowRepositoryUnavailable ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 border border-[#365D46] bg-[#173322] px-3 text-[#A7F3D0] hover:bg-[#20452E] hover:text-white"
+                          onClick={onShowRepositoryUnavailable}
+                        >
+                          Learn more
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 ) : null}
 
