@@ -20,6 +20,7 @@ import {
   MessageSquare,
   SquareTerminal,
   ChevronDown,
+  Loader2,
 } from "lucide-react";
 
 export default function TopBar({
@@ -44,6 +45,7 @@ export default function TopBar({
   const [isRequestingAccess, setIsRequestingAccess] = useState(false);
   const [isBranchSwitching, setIsBranchSwitching] = useState(false);
   const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
+  const [isBranchesLoading, setIsBranchesLoading] = useState(false);
   const [branches, setBranches] = useState({ current: "", local: [], remote: [] });
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -82,25 +84,41 @@ export default function TopBar({
     }
   }, [shouldOpenShareFromNotification]);
 
-  // Load branches when git panel opens
+  // Load branches when branch menu opens
   useEffect(() => {
-    if (isBranchMenuOpen && repository) {
-      const loadBranches = async () => {
-        try {
-          const res = await fetch(`/api/project/${projectId}/git/branches`, {
-            method: "GET",
-            credentials: "same-origin",
-          });
-          const data = await res.json();
-          if (res.ok) {
-            setBranches(data);
-          }
-        } catch (error) {
+    if (!isBranchMenuOpen || !repository) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadBranches = async () => {
+      setIsBranchesLoading(true);
+      try {
+        const res = await fetch(`/api/project/${projectId}/git/branches`, {
+          method: "GET",
+          credentials: "same-origin",
+        });
+        const data = await res.json();
+        if (!cancelled && res.ok) {
+          setBranches(data);
+        }
+      } catch (error) {
+        if (!cancelled) {
           console.error("Failed to load branches:", error);
         }
-      };
-      loadBranches();
-    }
+      } finally {
+        if (!cancelled) {
+          setIsBranchesLoading(false);
+        }
+      }
+    };
+
+    loadBranches();
+
+    return () => {
+      cancelled = true;
+    };
   }, [isBranchMenuOpen, repository, projectId]);
 
   const handleCheckoutBranch = async (branch) => {
@@ -327,7 +345,15 @@ export default function TopBar({
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 rounded-full border border-[#2B2B30] bg-[#17171D] px-2 py-1 transition-colors hover:border-[#3A3A42] hover:bg-[#1F1F27]"
-                      onClick={() => permissions.canEdit && setIsBranchMenuOpen((v) => !v)}
+                      onClick={() => {
+                        if (!permissions.canEdit) return;
+                        setIsBranchMenuOpen((open) => {
+                          if (!open) {
+                            setIsBranchesLoading(true);
+                          }
+                          return !open;
+                        });
+                      }}
                       title={permissions.canEdit ? "Switch branch" : "Current branch"}
                     >
                       <GitBranch className="size-3" />
@@ -342,10 +368,19 @@ export default function TopBar({
                           onClick={() => setIsBranchMenuOpen(false)}
                         />
                         <div className="absolute left-0 top-full z-20 mt-1 min-w-[220px] rounded-xl border border-[#2B2B30] bg-[#18181E] p-1 shadow-lg">
-                          {isBranchSwitching && (
-                            <div className="px-3 py-2 text-xs text-[#8B909A]">Switching branch…</div>
-                          )}
-                          {!isBranchSwitching && (
+                          {isBranchSwitching ? (
+                            <div className="flex items-center gap-2 px-3 py-3 text-xs text-[#8B909A]">
+                              <Loader2 className="size-3 shrink-0 animate-spin" />
+                              Switching branch…
+                            </div>
+                          ) : isBranchesLoading ? (
+                            <div className="flex items-center gap-2 px-3 py-3 text-xs text-[#8B909A]">
+                              <Loader2 className="size-3 shrink-0 animate-spin" />
+                              Loading branches…
+                            </div>
+                          ) : branches.local.length === 0 && branches.remote.length === 0 ? (
+                            <div className="px-3 py-3 text-xs text-[#8B909A]">No branches found</div>
+                          ) : (
                             <>
                               {branches.local.length > 0 && (
                                 <>
