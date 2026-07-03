@@ -70,11 +70,6 @@ export default function CreateProjectPage() {
         <Card className="p-4 md:p-6 gap-4">
           {/* Header */}
           <div className="text-center mb-6">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <div className="p-3 bg-primary/10 rounded-full">
-                <Plus className="h-6 w-6 text-primary" />
-              </div>
-            </div>
             <h1 className="text-2xl font-bold text-foreground">
               Create New Project
             </h1>
