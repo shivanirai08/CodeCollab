@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, Copy, Check, Globe, Lock, ChevronDown, Link2, EllipsisVertical, Trash2 } from "lucide-react";
+import { X, Copy, Check, Globe, Lock, ChevronDown, Link2, EllipsisVertical, Trash2, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useSelector, useDispatch } from "react-redux";
 import { toast } from "sonner";
-import { updateProjectVisibility } from "@/store/ProjectSlice";
+import { updateProjectDetails, updateProjectVisibility } from "@/store/ProjectSlice";
 import { useParams, useSearchParams } from "next/navigation";
 import DeleteModal from "@/components/ui/DeleteModal";
 
@@ -24,12 +26,16 @@ export default function SharePanel({ isOpen, onClose }) {
   const visibility = useSelector((state) => state.project.visibility);
   const permissions = useSelector((state) => state.project.permissions);
   const projectname = useSelector((state) => state.project.projectname);
+  const description = useSelector((state) => state.project.description);
   const currentUserId = useSelector((state) => state.user.id);
 
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showVisibilityMenu, setShowVisibilityMenu] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showProjectDetails, setShowProjectDetails] = useState(false);
+  const [detailsForm, setDetailsForm] = useState({ projectName: "", description: "" });
+  const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [showMemberMenu, setShowMemberMenu] = useState(null); // Store member ID for which menu is open
   const [isRemoving, setIsRemoving] = useState(false);
   const [memberToRemove, setMemberToRemove] = useState(null); // Store member data for delete modal
@@ -93,6 +99,18 @@ export default function SharePanel({ isOpen, onClose }) {
     });
   }, [isOpen, permissions.isOwner, shouldFocusJoinRequests, joinRequests.length]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    setDetailsForm({
+      projectName: projectname || "",
+      description: description || "",
+    });
+    setShowProjectDetails(false);
+  }, [isOpen, projectname, description]);
+
   const handleReviewRequest = async (requestId, action, role = "collaborator") => {
     setProcessingRequestId(requestId);
     try {
@@ -148,6 +166,39 @@ export default function SharePanel({ isOpen, onClose }) {
       toast.error(error || "Failed to update visibility");
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleSaveDetails = async () => {
+    if (!permissions.isOwner) {
+      return;
+    }
+
+    if (!detailsForm.projectName.trim()) {
+      toast.error("Project name is required");
+      return;
+    }
+
+    if (detailsForm.projectName.trim().length > 20) {
+      toast.error("Project name can be up to 20 characters");
+      return;
+    }
+
+    setIsSavingDetails(true);
+
+    try {
+      await dispatch(
+        updateProjectDetails({
+          projectid: projectId,
+          projectName: detailsForm.projectName.trim(),
+          description: detailsForm.description.trim(),
+        })
+      ).unwrap();
+      toast.success("Project details updated");
+    } catch (error) {
+      toast.error(error || "Failed to update project details");
+    } finally {
+      setIsSavingDetails(false);
     }
   };
 
@@ -228,13 +279,13 @@ export default function SharePanel({ isOpen, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div
         className={cn(
-          "relative w-full max-w-lg bg-[#1A1A20] text-white rounded-xl shadow-xl border border-[#2B2B30]",
-          "animate-in fade-in zoom-in duration-200 max-h-[85vh] overflow-hidden flex flex-col"
+          "relative w-full max-w-lg overflow-y-auto bg-[#1A1A20] text-white rounded-xl shadow-xl border border-[#2B2B30]",
+          "animate-in fade-in zoom-in duration-200 max-h-[85vh]"
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4">
-          <h2 className="text-lg font-semibold">Share "{projectname}"</h2>
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#2B2B30] bg-[#1A1A20] px-6 py-4">
+          <h2 className="text-lg font-semibold">Project settings</h2>
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
@@ -300,9 +351,7 @@ export default function SharePanel({ isOpen, onClose }) {
           </div>
         )}
 
-        {/* Members List */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-
+        <div className="px-6 py-4">
           <div className="space-y-2">
             {/* Visibility Row */}
             <div className="flex items-center justify-between py-1 px-3 rounded-lg  group">
@@ -436,7 +485,7 @@ export default function SharePanel({ isOpen, onClose }) {
             ))}
 
             {allMembers.length === 0 && (
-              <div className="text-center py-8 text-gray-500 text-sm">
+              <div className="py-2 text-center text-sm text-gray-500">
                 No members yet
               </div>
             )}
@@ -445,12 +494,12 @@ export default function SharePanel({ isOpen, onClose }) {
               <div
                 ref={joinRequestsRef}
                 className={cn(
-                  "mt-6 rounded-xl border border-[#2B2B30] bg-[#17171D] p-4",
+                  "mt-4 rounded-xl border border-[#2B2B30] bg-[#17171D] p-4",
                   shouldFocusJoinRequests && "border-white/30 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
                 )}
               >
-                <div className="mb-3 flex items-center justify-between">
-                  <div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
                     <h3 className="text-sm font-semibold text-white">Join Requests</h3>
                     <p className="text-xs text-gray-400">
                       Review pending access requests for this project
@@ -459,7 +508,7 @@ export default function SharePanel({ isOpen, onClose }) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-gray-300 hover:bg-[#2B2B30]"
+                    className="shrink-0 text-gray-300 hover:bg-[#2B2B30]"
                     onClick={fetchJoinRequests}
                   >
                     Refresh
@@ -467,15 +516,11 @@ export default function SharePanel({ isOpen, onClose }) {
                 </div>
 
                 {loadingRequests ? (
-                  <div className="py-6 text-center text-sm text-gray-400">
-                    Loading requests...
-                  </div>
+                  <p className="mt-2 text-xs text-gray-400">Loading requests...</p>
                 ) : joinRequests.length === 0 ? (
-                  <div className="py-6 text-center text-sm text-gray-500">
-                    No pending requests
-                  </div>
+                  <p className="mt-2 text-xs text-gray-500">No pending requests</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="mt-3 space-y-3">
                     {joinRequests.map((request) => (
                       <div
                         key={request.id}
@@ -529,6 +574,73 @@ export default function SharePanel({ isOpen, onClose }) {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+            {permissions.isOwner && (
+              <div className="mt-4 border-t border-[#2B2B30] pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowProjectDetails((open) => !open)}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-300 transition-colors hover:bg-[#23232A] hover:text-white"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Settings2 className="h-4 w-4 text-gray-500" />
+                    Project details
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 text-gray-500 transition-transform",
+                      showProjectDetails && "rotate-180"
+                    )}
+                  />
+                </button>
+
+                {showProjectDetails ? (
+                  <div className="mt-3 space-y-3 rounded-lg border border-[#2B2B30] bg-[#17171D] p-4">
+                    <div className="space-y-2">
+                      <label htmlFor="project-name" className="text-xs text-gray-400">
+                        Name
+                      </label>
+                      <Input
+                        id="project-name"
+                        value={detailsForm.projectName}
+                        maxLength={20}
+                        onChange={(event) =>
+                          setDetailsForm((current) => ({
+                            ...current,
+                            projectName: event.target.value,
+                          }))
+                        }
+                        className="border-[#36363E] bg-[#141419] text-white"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label htmlFor="project-description" className="text-xs text-gray-400">
+                        Description
+                      </label>
+                      <Textarea
+                        id="project-description"
+                        value={detailsForm.description}
+                        rows={3}
+                        onChange={(event) =>
+                          setDetailsForm((current) => ({
+                            ...current,
+                            description: event.target.value,
+                          }))
+                        }
+                        className="resize-none border-[#36363E] bg-[#141419] text-white"
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={handleSaveDetails}
+                      disabled={isSavingDetails}
+                      className="h-8 bg-[#E5E7EB] px-4 text-black hover:bg-white"
+                    >
+                      {isSavingDetails ? "Saving..." : "Save changes"}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

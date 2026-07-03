@@ -146,6 +146,30 @@ export const updateProjectVisibility = createAsyncThunk(
   }
 );
 
+export const updateProjectDetails = createAsyncThunk(
+  "project/updateDetails",
+  async ({ projectid, projectName, description }, { rejectWithValue }) => {
+    try {
+      const res = await fetch(`/api/project/${projectid}/details`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ projectName, description }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update project details");
+      }
+
+      return data.project;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 export const fetchGitStatus = createAsyncThunk(
   "project/fetchGitStatus",
   async (projectid, { rejectWithValue }) => {
@@ -345,6 +369,16 @@ const projectSlice = createSlice({
         state.error = null;
       })
       .addCase(updateProjectVisibility.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.payload;
+      })
+      .addCase(updateProjectDetails.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.projectname = action.payload.projectname;
+        state.description = action.payload.description || "";
+        state.error = null;
+      })
+      .addCase(updateProjectDetails.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.payload;
       })

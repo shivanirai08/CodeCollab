@@ -22,6 +22,7 @@ import {
   SquareTerminal,
   ChevronDown,
   Loader2,
+  Settings,
 } from "lucide-react";
 
 export default function TopBar({
@@ -250,8 +251,8 @@ export default function TopBar({
           className="h-9 bg-gradient-to-b from-[#FFF] to-[#6B696D] px-3 py-2 text-sm text-black md:h-10 md:px-6"
           onClick={() => setIsShareOpen(true)}
         >
-          <span className="hidden sm:inline">Share</span>
-          <span className="sm:hidden">S</span>
+          <span className="hidden sm:inline">Settings</span>
+          <Settings className="h-4 w-4 sm:hidden" />
           {projectJoinRequestAlertCount > 0 ? (
             <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-black/80 px-1.5 py-0.5 text-[10px] font-semibold text-white">
               {projectJoinRequestAlertCount}
