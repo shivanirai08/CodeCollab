@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getRealtimeService } from "@/lib/supabase/realtime";
 
 const NotificationsContext = createContext(null);
+const MIN_REFETCH_INTERVAL_MS = 60_000;
 
 function useNotificationsState() {
   const [notifications, setNotifications] = useState([]);
@@ -25,35 +26,54 @@ function useNotificationsState() {
   const initializedRef = useRef(false);
   const authListenerRef = useRef(null);
   const userIdRef = useRef(null);
+  const lastFetchAtRef = useRef(0);
+  const fetchInFlightRef = useRef(null);
 
   const recomputeUnreadCount = useCallback((items) => {
     setUnreadCount(items.filter((item) => !item.is_read).length);
   }, []);
 
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const res = await fetch("/api/notifications", {
-        credentials: "same-origin",
-      });
+  const fetchNotifications = useCallback(async ({ force = false } = {}) => {
+    const now = Date.now();
 
-      if (!res.ok) {
-        throw new Error("Failed to fetch notifications");
-      }
-
-      const data = await res.json();
-      const items = data.notifications || [];
-
-      setNotifications(items);
-      setUnreadCount(
-        data.unreadCount ?? items.filter((item) => !item.is_read).length
-      );
-      seenNotificationIdsRef.current = new Set(items.map((item) => item.id));
-      initializedRef.current = true;
-    } catch (error) {
-      console.error("Failed to load notifications:", error);
-    } finally {
-      setLoading(false);
+    if (!force && now - lastFetchAtRef.current < MIN_REFETCH_INTERVAL_MS) {
+      return;
     }
+
+    if (fetchInFlightRef.current) {
+      return fetchInFlightRef.current;
+    }
+
+    lastFetchAtRef.current = now;
+
+    fetchInFlightRef.current = (async () => {
+      try {
+        const res = await fetch("/api/notifications", {
+          credentials: "same-origin",
+        });
+
+        if (!res.ok) {
+          throw new Error("Failed to fetch notifications");
+        }
+
+        const data = await res.json();
+        const items = data.notifications || [];
+
+        setNotifications(items);
+        setUnreadCount(
+          data.unreadCount ?? items.filter((item) => !item.is_read).length
+        );
+        seenNotificationIdsRef.current = new Set(items.map((item) => item.id));
+        initializedRef.current = true;
+      } catch (error) {
+        console.error("Failed to load notifications:", error);
+      } finally {
+        setLoading(false);
+        fetchInFlightRef.current = null;
+      }
+    })();
+
+    return fetchInFlightRef.current;
   }, []);
 
   const markAsRead = useCallback(
@@ -175,11 +195,7 @@ function useNotificationsState() {
             if (!mounted) return;
 
             if (status === "SUBSCRIBED") {
-              fetchNotifications();
-            }
-
-            if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
-              fetchNotifications();
+              fetchNotifications({ force: !initializedRef.current });
             }
           },
         }
@@ -199,14 +215,17 @@ function useNotificationsState() {
       }
 
       await subscribeForUser(user.id);
-      await fetchNotifications();
     }
 
     initialize();
 
     authListenerRef.current = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         if (!mounted) return;
+
+        if (event === "TOKEN_REFRESHED") {
+          return;
+        }
 
         const nextUserId = session?.user?.id || null;
 
@@ -216,26 +235,23 @@ function useNotificationsState() {
         }
 
         if (nextUserId !== userIdRef.current) {
+          initializedRef.current = false;
           await subscribeForUser(nextUserId);
         }
-
-        await fetchNotifications();
       }
     );
 
-    const handleWindowFocus = () => {
+    const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         fetchNotifications();
       }
     };
 
-    window.addEventListener("focus", handleWindowFocus);
-    document.addEventListener("visibilitychange", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       mounted = false;
-      window.removeEventListener("focus", handleWindowFocus);
-      document.removeEventListener("visibilitychange", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       authListenerRef.current?.data?.subscription?.unsubscribe?.();
       cleanupSubscription();
     };
@@ -246,7 +262,7 @@ function useNotificationsState() {
     notifications,
     unreadCount,
     loading,
-    refetch: fetchNotifications,
+    refetch: () => fetchNotifications({ force: true }),
     markAsRead,
     markAllAsRead,
   };
