@@ -14,18 +14,17 @@ import {
   getConflictFilesFromGitStatus,
   normalizeGitNodePath,
 } from "@/lib/gitStatus";
-import { fetchGitStatus, fetchProject } from "@/store/ProjectSlice";
+import { fetchGitStatus, fetchProject, setGitStatus } from "@/store/ProjectSlice";
 import {
   fetchNodes,
   openGitDiffTab,
   setActiveFile,
   updateLocalContent,
 } from "@/store/NodesSlice";
+import GitSourceControlList from "./GitSourceControlList";
 import {
-  ArrowUp,
   Check,
   Download,
-  FileCode2,
   FolderGit2,
   GitBranch,
   Github,
@@ -98,6 +97,7 @@ export default function GitPanel({
 
   const [commitMessage, setCommitMessage] = useState("");
   const [actionLoading, setActionLoading] = useState(null);
+  const [workingTreeActionKey, setWorkingTreeActionKey] = useState(null);
   const [panelWidth, setPanelWidth] = useState(520);
   const [isResizing, setIsResizing] = useState(false);
   const panelRef = useRef(null);
@@ -127,16 +127,27 @@ export default function GitPanel({
   const hasStagedChanges = stagedFiles.length > 0;
   const hasCommitMessage = Boolean(commitMessage.trim());
   const canCommit =
-    hasStagedChanges && hasCommitMessage && !hasConflicts && !actionLoading && !needsRebaseContinue;
+    hasStagedChanges &&
+    hasCommitMessage &&
+    !hasConflicts &&
+    !actionLoading &&
+    !workingTreeActionKey &&
+    !needsRebaseContinue;
   const canPush =
     !actionLoading &&
+    !workingTreeActionKey &&
     !hasConflicts &&
     !hasDirtyChanges &&
     !needsRebaseContinue &&
     aheadCount > 0;
   const canPull =
-    !actionLoading && !hasConflicts && !hasDirtyChanges && !needsRebaseContinue && behindCount > 0;
-  const canFinishRebase = !actionLoading && needsRebaseContinue;
+    !actionLoading &&
+    !workingTreeActionKey &&
+    !hasConflicts &&
+    !hasDirtyChanges &&
+    !needsRebaseContinue &&
+    behindCount > 0;
+  const canFinishRebase = !actionLoading && !workingTreeActionKey && needsRebaseContinue;
   const nodePathIndex = useMemo(() => buildNodePathIndex(nodes), [nodes]);
   const selectedRepo = githubRepos.find((repo) => repo.id === selectedRepoId) || null;
   const gitIssueActionLabel = gitIssue
@@ -279,6 +290,43 @@ export default function GitPanel({
 
     if (issue.details) {
       console.error(`${issue.title}:`, issue.details);
+    }
+  };
+
+  const runWorkingTreeAction = async ({
+    endpoint,
+    body = {},
+    actionKey,
+    refreshNodes = false,
+  }) => {
+    setWorkingTreeActionKey(actionKey);
+    try {
+      const response = await fetch(`/api/project/${projectId}/git/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(body),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        presentGitIssue(result, endpoint);
+        return;
+      }
+
+      if (result.status) {
+        dispatch(setGitStatus(result.status));
+      } else {
+        await dispatch(fetchGitStatus({ projectId, silent: true }));
+      }
+
+      if (refreshNodes) {
+        await dispatch(fetchNodes(projectId));
+      }
+    } catch (error) {
+      presentGitIssue({ error: error.message || `Failed to ${endpoint}` }, endpoint);
+    } finally {
+      setWorkingTreeActionKey(null);
     }
   };
 
@@ -605,19 +653,13 @@ export default function GitPanel({
             </div>
 
             <div className="border-b border-[#24242A] px-4 py-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-[#24242A] bg-[#121218] p-3">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-[#7C8392]">Review</div>
-                  <div className="mt-2 text-2xl font-semibold text-white">{files.length}</div>
-                  <div className="text-xs text-[#8B909A]">changed files</div>
-                </div>
-                <div className="rounded-xl border border-[#24242A] bg-[#121218] p-3">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-[#7C8392]">Ship</div>
-                  <div className="mt-2 text-2xl font-semibold text-white">{aheadCount}</div>
-                  <div className="text-xs text-[#8B909A]">
-                    commits to push{behindCount > 0 ? ` · ${behindCount} behind` : ""}
-                  </div>
-                </div>
+              <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#8B909A]">
+                <span>
+                  {stagedFiles.length} staged · {unstagedFiles.length} changes
+                </span>
+                {aheadCount > 0 ? <span>{aheadCount} ahead</span> : null}
+                {behindCount > 0 ? <span>{behindCount} behind</span> : null}
+                {gitStatus?.isClean ? <span className="text-emerald-400">Clean</span> : null}
               </div>
 
               {needsRebaseContinue ? (
@@ -826,74 +868,65 @@ export default function GitPanel({
                   </>
                 ) : null}
 
-                <div className="px-3 pt-3 text-[11px] uppercase tracking-[0.14em] text-[#6B7280]">
-                  Staged {stagedFiles.length}
-                </div>
-                <div className="mt-1">
-                  {stagedFiles.map((file) => (
-                    <div
-                      key={`staged-${file.path}`}
-                      onClick={() => openInEditor(file.path)}
-                      className="group flex w-full cursor-pointer items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-[#17171D]"
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="text-[#34D399]">M</span>
-                        <span className="truncate">{file.path}</span>
-                      </span>
-                        <div className="flex min-w-0 items-center gap-1">
-                          <span className="shrink-0 rounded px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: FILE_STATUS_COLORS.staged.bg, color: FILE_STATUS_COLORS.staged.text }}>
-                            {FILE_STATUS_COLORS.staged.label}
-                          </span>
-                          <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-1.5 text-[#7C8392] hover:bg-[#22222A] hover:text-white"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          runAction("unstage-file", "unstage", { paths: [file.path] });
-                        }}
-                      >
-                        <X className="size-3.5" />
-                      </Button>
-                        </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-3 px-3 text-[11px] uppercase tracking-[0.14em] text-[#6B7280]">
-                  Changes {unstagedFiles.length}
-                </div>
-                <div className="mt-1 pb-3">
-                  {unstagedFiles.map((file) => (
-                    <div
-                      key={`unstaged-${file.path}`}
-                      onClick={() => openInEditor(file.path)}
-                      className="group flex w-full cursor-pointer items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-[#17171D]"
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <FileCode2 className="size-3.5 text-[#7C8392]" />
-                        <span className="truncate">{file.path}</span>
-                      </span>
-                        <div className="flex min-w-0 items-center gap-1">
-                          <span className="shrink-0 rounded px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: FILE_STATUS_COLORS.unstaged.bg, color: FILE_STATUS_COLORS.unstaged.text }}>
-                            {FILE_STATUS_COLORS.unstaged.label}
-                          </span>
-                          <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-1.5 text-[#7C8392] hover:bg-[#22222A] hover:text-white"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          runAction("stage-file", "stage", { paths: [file.path] });
-                        }}
-                        disabled={file.status === "conflicted"}
-                      >
-                        <ArrowUp className="size-3.5" />
-                      </Button>
-                        </div>
-                    </div>
-                  ))}
-                </div>
+                <GitSourceControlList
+                  stagedFiles={stagedFiles}
+                  unstagedFiles={unstagedFiles}
+                  canEdit={permissions.canEdit}
+                  workingTreeActionKey={workingTreeActionKey}
+                  onOpen={openInEditor}
+                  onStageFile={(path) =>
+                    runWorkingTreeAction({
+                      endpoint: "stage",
+                      body: { paths: [path] },
+                      actionKey: `file:${path}:stage`,
+                    })
+                  }
+                  onUnstageFile={(path) =>
+                    runWorkingTreeAction({
+                      endpoint: "unstage",
+                      body: { paths: [path] },
+                      actionKey: `file:${path}:unstage`,
+                    })
+                  }
+                  onDiscardFile={(path) =>
+                    runWorkingTreeAction({
+                      endpoint: "discard",
+                      body: { paths: [path] },
+                      actionKey: `file:${path}:discard`,
+                      refreshNodes: true,
+                    })
+                  }
+                  onStageAll={() =>
+                    runWorkingTreeAction({
+                      endpoint: "stage",
+                      body: { stageAll: true },
+                      actionKey: "bulk:stage-all",
+                    })
+                  }
+                  onUnstageAll={() =>
+                    runWorkingTreeAction({
+                      endpoint: "unstage",
+                      body: { unstageAll: true },
+                      actionKey: "bulk:unstage-all",
+                    })
+                  }
+                  onDiscardAllChanges={() =>
+                    runWorkingTreeAction({
+                      endpoint: "discard",
+                      body: { discardAll: true, scope: "changes" },
+                      actionKey: "bulk:discard-all-changes",
+                      refreshNodes: true,
+                    })
+                  }
+                  onDiscardAllStaged={() =>
+                    runWorkingTreeAction({
+                      endpoint: "discard",
+                      body: { discardAll: true, scope: "staged" },
+                      actionKey: "bulk:discard-all-staged",
+                      refreshNodes: true,
+                    })
+                  }
+                />
             </div>
             </div>
           </>

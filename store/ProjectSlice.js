@@ -172,7 +172,9 @@ export const updateProjectDetails = createAsyncThunk(
 
 export const fetchGitStatus = createAsyncThunk(
   "project/fetchGitStatus",
-  async (projectid, { rejectWithValue }) => {
+  async (arg, { rejectWithValue }) => {
+    const projectid = typeof arg === "string" ? arg : arg?.projectId;
+
     try {
       const res = await fetch(`/api/project/${projectid}/git/status`, {
         credentials: "same-origin",
@@ -198,6 +200,11 @@ const projectSlice = createSlice({
   name: "project",
   initialState,
   reducers: {
+    setGitStatus: (state, action) => {
+      state.gitStatus = action.payload;
+      state.gitStatusError = null;
+      state.gitStatusIssue = null;
+    },
     clearProject: (state) => {
       state.projectid = "";
       state.projectname = "Project";
@@ -382,10 +389,14 @@ const projectSlice = createSlice({
         state.status = "failed";
         state.error = action.payload;
       })
-      .addCase(fetchGitStatus.pending, (state) => {
-        state.gitStatusLoading = true;
-        state.gitStatusError = null;
-        state.gitStatusIssue = null;
+      .addCase(fetchGitStatus.pending, (state, action) => {
+        const silent =
+          typeof action.meta.arg === "object" && Boolean(action.meta.arg?.silent);
+        if (!silent) {
+          state.gitStatusLoading = true;
+          state.gitStatusError = null;
+          state.gitStatusIssue = null;
+        }
       })
       .addCase(fetchGitStatus.fulfilled, (state, action) => {
         state.gitStatusLoading = false;
@@ -407,6 +418,7 @@ const projectSlice = createSlice({
 
 export const {
   clearProject,
+  setGitStatus,
   updateOnlineUsers,
   handleRemoteMemberInsert,
   handleRemoteMemberDelete,
