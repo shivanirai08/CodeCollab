@@ -5,6 +5,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import GitHubImportModal from "@/components/ui/GitHubImportModal";
+import CreateBranchDialog from "@/components/ui/CreateBranchDialog";
 import {
   getGitSuggestedActionLabel,
   isRepositoryUnavailableIssue,
@@ -20,6 +21,7 @@ import {
   openGitDiffTab,
   setActiveFile,
   updateLocalContent,
+  closeAllFiles,
 } from "@/store/NodesSlice";
 import GitSourceControlList from "./GitSourceControlList";
 import {
@@ -30,6 +32,7 @@ import {
   Github,
   Info,
   Loader2,
+  Plus,
   RefreshCw,
   Sparkles,
   Upload,
@@ -89,6 +92,8 @@ export default function GitPanel({
   const dispatch = useDispatch();
   const repository = useSelector((state) => state.project.repository);
   const permissions = useSelector((state) => state.project.permissions);
+  const onlineUsers = useSelector((state) => state.project.onlineUsers);
+  const reduxUserId = useSelector((state) => state.user.id);
   const gitStatus = useSelector((state) => state.project.gitStatus);
   const gitStatusLoading = useSelector((state) => state.project.gitStatusLoading);
   const gitStatusIssue = useSelector((state) => state.project.gitStatusIssue);
@@ -105,6 +110,7 @@ export default function GitPanel({
   const [githubConnected, setGithubConnected] = useState(false);
   const [isLoadingRepos, setIsLoadingRepos] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isCreateBranchOpen, setIsCreateBranchOpen] = useState(false);
   const [selectedRepoId, setSelectedRepoId] = useState(null);
   const [isImportingRepo, setIsImportingRepo] = useState(false);
   const [showFlowInfo, setShowFlowInfo] = useState(false);
@@ -153,6 +159,38 @@ export default function GitPanel({
   const gitIssueActionLabel = gitIssue
     ? getGitSuggestedActionLabel(gitIssue.suggestedAction)
     : null;
+
+  const collaboratorCount = useMemo(() => {
+    const currentUserId = reduxUserId || "current-user";
+    if (!onlineUsers?.length) return 0;
+    return onlineUsers.filter((user) => user.user_id !== currentUserId).length;
+  }, [onlineUsers, reduxUserId]);
+
+  const handleBranchCreated = async (data) => {
+    const {
+      updatedCount = 0,
+      createdCount = 0,
+      deletedCount = 0,
+    } = data.mergeResult || {};
+    const summary = [];
+    if (updatedCount > 0) summary.push(`${updatedCount} files updated`);
+    if (createdCount > 0) summary.push(`${createdCount} files added`);
+    if (deletedCount > 0) summary.push(`${deletedCount} files removed`);
+
+    let message = `Created branch "${data.branch || ""}"`;
+    if (data.pushed) {
+      message += " and pushed to origin";
+    }
+    if (summary.length > 0) {
+      message += `: ${summary.join(", ")}`;
+    }
+
+    toast.success(message);
+    dispatch(closeAllFiles());
+    await dispatch(fetchProject(projectId));
+    await dispatch(fetchGitStatus(projectId));
+    await dispatch(fetchNodes(projectId));
+  };
 
   useEffect(() => {
     if (!isOpen || !repository || !projectId) {
@@ -632,6 +670,18 @@ export default function GitPanel({
                 </div>
               </div>
               <div className="flex items-center gap-1">
+                {permissions.canEdit ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-[#A3A8B3] hover:bg-[#1A1A20] hover:text-white"
+                    onClick={() => setIsCreateBranchOpen(true)}
+                    disabled={Boolean(actionLoading)}
+                  >
+                    <Plus className="size-4" />
+                    <span className="ml-1 hidden sm:inline">New branch</span>
+                  </Button>
+                ) : null}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -934,6 +984,17 @@ export default function GitPanel({
           renderEmptyState()
         )}
       </aside>
+
+      {repository && permissions.canEdit ? (
+        <CreateBranchDialog
+          isOpen={isCreateBranchOpen}
+          onClose={() => setIsCreateBranchOpen(false)}
+          projectId={projectId}
+          currentBranch={repository.currentBranch}
+          collaboratorCount={collaboratorCount}
+          onSuccess={handleBranchCreated}
+        />
+      ) : null}
     </>
   );
 }

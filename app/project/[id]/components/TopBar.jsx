@@ -11,6 +11,7 @@ import useVoiceCall from "@/hooks/useVoiceCall";
 import useNotifications from "@/hooks/useNotifications";
 import NotificationBell from "@/components/ui/NotificationBell";
 import { toast } from "sonner";
+import CreateBranchDialog from "@/components/ui/CreateBranchDialog";
 import { fetchProject, fetchGitStatus } from "@/store/ProjectSlice";
 import { fetchNodes, closeAllFiles } from "@/store/NodesSlice";
 import { isRepositoryUnavailableIssue } from "@/lib/gitActionErrors";
@@ -22,6 +23,7 @@ import {
   SquareTerminal,
   ChevronDown,
   Loader2,
+  Plus,
   Settings,
 } from "lucide-react";
 
@@ -49,6 +51,7 @@ export default function TopBar({
   const [isRequestingAccess, setIsRequestingAccess] = useState(false);
   const [isBranchSwitching, setIsBranchSwitching] = useState(false);
   const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
+  const [isCreateBranchOpen, setIsCreateBranchOpen] = useState(false);
   const [isBranchesLoading, setIsBranchesLoading] = useState(false);
   const [branches, setBranches] = useState({ current: "", local: [], remote: [] });
   const router = useRouter();
@@ -175,6 +178,44 @@ export default function TopBar({
   };
 
   const currentUserId = reduxUserId || voiceUserId || "current-user";
+
+  const collaboratorCount = useMemo(() => {
+    if (!onlineUsers?.length) return 0;
+    return onlineUsers.filter((user) => user.user_id !== currentUserId).length;
+  }, [onlineUsers, currentUserId]);
+
+  const refreshAfterBranchChange = async (data, actionLabel) => {
+    const {
+      updatedCount = 0,
+      createdCount = 0,
+      deletedCount = 0,
+    } = data.mergeResult || {};
+    const summary = [];
+    if (updatedCount > 0) summary.push(`${updatedCount} files updated`);
+    if (createdCount > 0) summary.push(`${createdCount} files added`);
+    if (deletedCount > 0) summary.push(`${deletedCount} files removed`);
+
+    const branchName = data.branch || "";
+    let message = `${actionLabel} "${branchName}"`;
+    if (data.pushed) {
+      message += " and pushed to origin";
+    }
+    if (summary.length > 0) {
+      message += `: ${summary.join(", ")}`;
+    }
+
+    toast.success(message);
+    dispatch(closeAllFiles());
+    await dispatch(fetchProject(projectId));
+    await dispatch(fetchGitStatus(projectId));
+    await dispatch(fetchNodes(projectId));
+  };
+
+  const handleBranchCreated = async (data) => {
+    setIsBranchMenuOpen(false);
+    await refreshAfterBranchChange(data, "Created branch");
+  };
+
   const projectJoinRequestAlertCount = useMemo(() => {
     if (!permissions.isOwner) return 0;
 
@@ -340,10 +381,16 @@ export default function TopBar({
             <div className="mt-1 flex max-w-full items-center gap-2 text-xs text-[#8B909A]">
               {repository ? (
                 <>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-[#2B2B30] bg-[#17171D] px-2 py-1">
+                  <a
+                    href={repository.repoUrl || `https://github.com/${repository.repoFullName}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open on GitHub"
+                    className="inline-flex items-center gap-1 rounded-full border border-[#2B2B30] bg-[#17171D] px-2 py-1 transition-colors hover:border-[#3A3A42] hover:bg-[#1F1F27] hover:text-white"
+                  >
                     <Github className="size-3" />
                     <span className="truncate">{repository.repoFullName}</span>
-                  </span>
+                  </a>
                   {/* Branch switcher */}
                   <div className="relative hidden sm:block">
                     <button
@@ -383,7 +430,22 @@ export default function TopBar({
                               Loading branches…
                             </div>
                           ) : branches.local.length === 0 && branches.remote.length === 0 ? (
-                            <div className="px-3 py-3 text-xs text-[#8B909A]">No branches found</div>
+                            <div className="px-3 py-3 text-xs text-[#8B909A]">
+                              <p>No branches found</p>
+                              {permissions.canEdit ? (
+                                <button
+                                  type="button"
+                                  className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[#C9C9D6] transition-colors hover:bg-[#1F1F27] hover:text-white"
+                                  onClick={() => {
+                                    setIsBranchMenuOpen(false);
+                                    setIsCreateBranchOpen(true);
+                                  }}
+                                >
+                                  <Plus className="size-3 shrink-0" />
+                                  <span>Create branch…</span>
+                                </button>
+                              ) : null}
+                            </div>
                           ) : (
                             <>
                               {branches.local.length > 0 && (
@@ -427,6 +489,22 @@ export default function TopBar({
                                     ))}
                                 </>
                               )}
+                              {permissions.canEdit ? (
+                                <>
+                                  <div className="my-1 border-t border-[#2B2B30]" />
+                                  <button
+                                    type="button"
+                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-[#C9C9D6] transition-colors hover:bg-[#1F1F27] hover:text-white"
+                                    onClick={() => {
+                                      setIsBranchMenuOpen(false);
+                                      setIsCreateBranchOpen(true);
+                                    }}
+                                  >
+                                    <Plus className="size-3 shrink-0" />
+                                    <span>Create branch…</span>
+                                  </button>
+                                </>
+                              ) : null}
                             </>
                           )}
                         </div>
@@ -521,6 +599,18 @@ export default function TopBar({
         <SharePanel
           isOpen={isShareOpen}
           onClose={handleCloseShare}
+        />
+      ) : null}
+
+      {repository && permissions.canEdit ? (
+        <CreateBranchDialog
+          isOpen={isCreateBranchOpen}
+          onClose={() => setIsCreateBranchOpen(false)}
+          projectId={projectId}
+          currentBranch={repository.currentBranch}
+          branches={branches}
+          collaboratorCount={collaboratorCount}
+          onSuccess={handleBranchCreated}
         />
       ) : null}
     </>
