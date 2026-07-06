@@ -24,7 +24,6 @@ import {
   closeAllFiles,
 } from "@/store/NodesSlice";
 import GitSourceControlList from "./GitSourceControlList";
-import store from "@/store/store";
 import {
   Check,
   Download,
@@ -361,37 +360,6 @@ export default function GitPanel({
 
       if (refreshNodes) {
         await dispatch(fetchNodes(projectId));
-
-        // #region agent log
-        if (endpoint === "discard") {
-          const samplePath = body.paths?.[0];
-          const nodeId = samplePath ? nodePathIndex.get(samplePath) : null;
-          const nodeContent = nodeId
-            ? store.getState().nodes.fileContents[nodeId]
-            : null;
-          fetch("http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Debug-Session-Id": "f3af79",
-            },
-            body: JSON.stringify({
-              sessionId: "f3af79",
-              hypothesisId: "B",
-              location: "GitPanel.jsx:runWorkingTreeAction",
-              message: "post-discard frontend node state",
-              data: {
-                samplePath: samplePath || null,
-                nodeId: nodeId || null,
-                nodeContentLen: nodeContent?.length ?? -1,
-                gitIsClean: result.status?.isClean ?? null,
-                hasMergeResult: Boolean(result.mergeResult),
-              },
-              timestamp: Date.now(),
-            }),
-          }).catch(() => {});
-        }
-        // #endregion
       }
     } catch (error) {
       presentGitIssue({ error: error.message || `Failed to ${endpoint}` }, endpoint);

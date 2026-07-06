@@ -12,7 +12,15 @@ import {
 } from "react-icons/hi";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
-import { fetchNodes, createNode, setActiveFile, deleteNode, updateNode } from "@/store/NodesSlice";
+import {
+  fetchNodes,
+  createNode,
+  setActiveFile,
+  deleteNode,
+  updateNode,
+  fetchFileContent,
+} from "@/store/NodesSlice";
+import store from "@/store/store";
 import DeleteModal from "@/components/ui/DeleteModal";
 import FileItem from "./FileItem";
 import FolderItem from "./FolderItem";
@@ -28,6 +36,14 @@ export default function FileSidebar({ className, mobileOpen, onClose, desktopWid
 
   const nodes = useSelector((state) => state.nodes.nodes);
   const activeFileId = useSelector((state) => state.nodes.activeFileId);
+
+  const openFile = (fileId) => {
+    dispatch(setActiveFile(fileId));
+    const cachedContent = store.getState().nodes.fileContents[fileId];
+    if (cachedContent === undefined) {
+      dispatch(fetchFileContent(fileId));
+    }
+  };
   const projectname = useSelector((state) => state.project.projectname);
   const permissions = useSelector((state) => state.project.permissions);
   const gitStatus = useSelector((state) => state.project.gitStatus);
@@ -377,9 +393,7 @@ export default function FileSidebar({ className, mobileOpen, onClose, desktopWid
                   collapsed={collapsed}
                   open={openFolders.has(item.id)}
                   onToggle={toggleFolder}
-                  onFileClick={(fileId) => {
-                    dispatch(setActiveFile(fileId));
-                  }}
+                  onFileClick={openFile}
                   activeFileId={activeFileId}
                   onContextMenu={handleContextMenu}
                   onAddFile={handleAddFile}
@@ -400,9 +414,7 @@ export default function FileSidebar({ className, mobileOpen, onClose, desktopWid
                   file={item}
                   collapsed={collapsed}
                   active={item.id === activeFileId}
-                  onClick={() => {
-                    dispatch(setActiveFile(item.id));
-                  }}
+                  onClick={() => openFile(item.id)}
                   onContextMenu={handleContextMenu}
                   gitStatus={gitStatusByNodeId[item.id] || null}
                 />

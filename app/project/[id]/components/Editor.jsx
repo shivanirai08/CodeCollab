@@ -130,7 +130,9 @@ const MonacoEditor = () => {
 
   // Get active file details
   const activeFile = nodes.find((n) => n.id === activeFileId);
-  const content = activeFileId ? fileContents[activeFileId] || "" : "";
+  const content = activeFileId
+    ? (fileContents[activeFileId] ?? activeFile?.content ?? "")
+    : "";
   const activeFilePath = useMemo(
     () => resolveNodePath(nodes, activeFileId),
     [nodes, activeFileId]
@@ -316,6 +318,8 @@ const MonacoEditor = () => {
           if (!diskResponse.ok) {
             const diskResult = await diskResponse.json().catch(() => ({}));
             console.warn("Autosave to disk failed:", diskResult.error || diskResponse.statusText);
+          } else {
+            dispatch(fetchGitStatus({ projectId, silent: true }));
           }
         }
 
@@ -381,6 +385,13 @@ const MonacoEditor = () => {
     }, 2000),
     [permissions.canEdit, projectId]
   );
+
+  useEffect(() => {
+    return () => {
+      debouncedSave.flush();
+      debouncedDiffSave.flush();
+    };
+  }, [activeFileId, debouncedSave, debouncedDiffSave]);
 
   const handleGitDiffModifiedChange = (value) => {
     if (!activeEditorTabId || !permissions.canEdit || !isGitDiffActive || !activeGitDiffTab) return;

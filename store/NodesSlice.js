@@ -313,7 +313,6 @@ const nodesSlice = createSlice({
       state.editorTabOrder = state.editorTabOrder.filter(
         (id) => id !== fileId && id !== diffTabId
       );
-      delete state.fileContents[fileId];
       delete state.gitDiffTabsById[diffTabId];
 
       if (state.activeEditorTabId === fileId || state.activeEditorTabId === diffTabId) {
