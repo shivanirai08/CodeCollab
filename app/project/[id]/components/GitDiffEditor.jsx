@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { DiffEditor, useMonaco } from "@monaco-editor/react";
 
 const DIFF_STYLE_ID = "git-inline-diff-styles";
@@ -114,12 +114,17 @@ export default function GitDiffEditor({
 }) {
   const monaco = useMonaco();
   const onModifiedChangeRef = useRef(onModifiedChange);
+  const [editorModified, setEditorModified] = useState(modified);
   const fileName = filePath?.split("/").pop() || "";
   const language = getLanguageFromFileName(fileName);
 
   useEffect(() => {
     onModifiedChangeRef.current = onModifiedChange;
   }, [onModifiedChange]);
+
+  useEffect(() => {
+    setEditorModified(modified);
+  }, [filePath, original]);
 
   useEffect(() => {
     ensureDiffEditorStyles();
@@ -170,7 +175,8 @@ export default function GitDiffEditor({
     });
 
     modifiedEditor.onDidChangeModelContent(() => {
-      onModifiedChangeRef.current?.(modifiedEditor.getValue());
+      const value = modifiedEditor.getValue();
+      onModifiedChangeRef.current?.(value);
     });
 
     diffEditor.updateOptions({
@@ -191,18 +197,13 @@ export default function GitDiffEditor({
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         <DiffEditor
-          key={`${filePath}:${original.length}:${modified.length}`}
+          key={filePath}
           height="100%"
           language={language}
           original={original}
-          modified={modified}
+          modified={editorModified}
           theme="git-inline-diff"
           onMount={handleMount}
-          onChange={(value) => {
-            if (typeof value === "string") {
-              onModifiedChangeRef.current?.(value);
-            }
-          }}
           options={{
             renderSideBySide: false,
             readOnly,

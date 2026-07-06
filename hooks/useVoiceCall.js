@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSelector } from "react-redux";
 import { createClient } from "@/lib/supabase/client";
 import { getRealtimeService } from "@/lib/supabase/realtime";
@@ -36,11 +36,17 @@ export default function useVoiceCall(projectId) {
   const [connectionError, setConnectionError] = useState("");
 
   // User info from Redux (for presence tracking)
-  const user = useSelector((state) => ({
-    id: state.user.id,
-    username: state.user.userName,
-    avatar_url: state.user.avatar_url,
-  }));
+  const userId = useSelector((state) => state.user.id);
+  const userName = useSelector((state) => state.user.userName);
+  const avatarUrl = useSelector((state) => state.user.avatar_url);
+  const user = useMemo(
+    () => ({
+      id: userId,
+      username: userName,
+      avatar_url: avatarUrl,
+    }),
+    [userId, userName, avatarUrl]
+  );
 
   // --- Refs ---
   const wsRef = useRef(null);

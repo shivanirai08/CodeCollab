@@ -285,6 +285,8 @@ const MonacoEditor = () => {
 
   const { broadcastContentChange, broadcastCursorPosition, broadcastLineLock, broadcastLineUnlock, isApplyingRemoteChange } = collaborativeEditing;
 
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
 
   // Debounced save to database AND disk (autosave)
   const debouncedSave = useCallback(
@@ -295,7 +297,7 @@ const MonacoEditor = () => {
         // Update in database (also syncs worktree via nodes PATCH)
         const saveTask = dispatch(updateFileContent({ nodeId, content, projectId }));
 
-        const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+        const nodeMap = new Map(nodesRef.current.map((n) => [n.id, n]));
         const resolveRelativePath = (id) => {
           const segments = [];
           let cur = nodeMap.get(id);
@@ -335,7 +337,7 @@ const MonacoEditor = () => {
         }
       }
     }, 2000),
-    [dispatch, permissions.canEdit, projectId, nodes]
+    [dispatch, permissions.canEdit, projectId]
   );
 
   const handleEditorChange = (value) => {
@@ -378,12 +380,14 @@ const MonacoEditor = () => {
         if (!diskResponse.ok) {
           const diskResult = await diskResponse.json().catch(() => ({}));
           console.warn("Diff autosave to disk failed:", diskResult.error || diskResponse.statusText);
+        } else {
+          dispatch(fetchGitStatus({ projectId, silent: true }));
         }
       } catch (error) {
         console.error("Failed to save diff changes:", error);
       }
     }, 2000),
-    [permissions.canEdit, projectId]
+    [permissions.canEdit, projectId, dispatch]
   );
 
   useEffect(() => {
@@ -406,11 +410,13 @@ const MonacoEditor = () => {
     }
   };
 
-  // Cleanup debounce on unmount
+  // Cancel debounced handlers only on unmount
   useEffect(() => {
+    const save = debouncedSave;
+    const diffSave = debouncedDiffSave;
     return () => {
-      debouncedSave.cancel();
-      debouncedDiffSave.cancel();
+      save.cancel();
+      diffSave.cancel();
     };
   }, [debouncedSave, debouncedDiffSave]);
 
