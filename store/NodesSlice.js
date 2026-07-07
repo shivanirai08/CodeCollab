@@ -7,6 +7,18 @@ import {
   getNodeIdFromTabId,
   isGitDiffTabId,
 } from "@/lib/editorTabs";
+import { normalizeGitNodePath } from "@/lib/gitStatus";
+
+function resolveNodeRelativePath(nodes, nodeId) {
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const segments = [];
+  let current = nodeMap.get(nodeId);
+  while (current) {
+    segments.unshift(current.name);
+    current = current.parent_id ? nodeMap.get(current.parent_id) : null;
+  }
+  return normalizeGitNodePath(segments.join("/"));
+}
 
 function syncOpenFiles(state) {
   state.openFiles = state.editorTabOrder.filter((tabId) => !isGitDiffTabId(tabId));
@@ -58,6 +70,8 @@ const initialState = {
   remoteCursors: {}, // { fileId: { userId: { username, position, color, timestamp } } }
   lockedLines: {}, // { fileId: { lineNumber: { userId, username, timestamp } } }
   fileProblems: {}, // { fileId: [{ line, column, message, severity }] }
+  editorSaveCancelToken: 0,
+  editorSaveFlushToken: 0,
   status: "idle",
   error: null,
 };
@@ -269,12 +283,14 @@ const nodesSlice = createSlice({
     openGitDiffTab: (state, action) => {
       const { nodeId, filePath, original, modified } = action.payload;
       const tabId = getGitDiffTabId(nodeId);
+      const previousRevision = state.gitDiffTabsById[tabId]?.contentRevision ?? 0;
 
       state.gitDiffTabsById[tabId] = {
         nodeId,
         filePath,
         original: original ?? "",
         modified: modified ?? "",
+        contentRevision: previousRevision + 1,
       };
 
       if (!state.editorTabOrder.includes(tabId)) {
@@ -344,6 +360,24 @@ const nodesSlice = createSlice({
     updateLocalContent: (state, action) => {
       const { nodeId, content } = action.payload;
       state.fileContents[nodeId] = content;
+    },
+    requestEditorSaveCancel: (state) => {
+      state.editorSaveCancelToken += 1;
+    },
+    requestEditorSaveFlush: (state) => {
+      state.editorSaveFlushToken += 1;
+    },
+    invalidateLocalFileContents: (state, action) => {
+      const { paths = [], all = false } = action.payload || {};
+      const normalizedPaths = new Set(paths.map((path) => normalizeGitNodePath(path)));
+
+      state.nodes.forEach((node) => {
+        if (node.type !== "file") return;
+        const nodePath = resolveNodeRelativePath(state.nodes, node.id);
+        if (all || normalizedPaths.has(nodePath)) {
+          delete state.fileContents[node.id];
+        }
+      });
     },
     // Update remote cursor position
     updateRemoteCursor: (state, action) => {
@@ -464,15 +498,32 @@ const nodesSlice = createSlice({
 
         // Update file content cache if it's a file and content changed
         if (updatedNode.type === "file") {
-          // Only update if the file is not currently being edited by the user
-          // or if it's not the active file (to prevent overwriting user's changes)
-          const isActiveFile = state.activeFileId === updatedNode.id;
           const hasLocalChanges = state.fileContents[updatedNode.id] !== oldNode.content;
 
-          // Update content cache, but mark conflict if user has unsaved changes
-          if (!isActiveFile || !hasLocalChanges) {
+          if (!hasLocalChanges) {
             state.fileContents[updatedNode.id] = updatedNode.content;
           }
+          // #region agent log
+          if (typeof fetch !== "undefined") {
+            fetch("http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f3af79" },
+              body: JSON.stringify({
+                sessionId: "f3af79",
+                hypothesisId: "D",
+                location: "NodesSlice.js:handleRemoteNodeUpdate",
+                message: "remote node content sync",
+                data: {
+                  nodeId: updatedNode.id,
+                  hasLocalChanges,
+                  preserved: hasLocalChanges,
+                  isActiveFile: state.activeFileId === updatedNode.id,
+                },
+                timestamp: Date.now(),
+              }),
+            }).catch(() => {});
+          }
+          // #endregion
         }
       }
     },
@@ -507,6 +558,15 @@ const nodesSlice = createSlice({
         state.error = null;
       })
       .addCase(fetchNodes.fulfilled, (state, action) => {
+        const dirtyFileIds = new Set();
+        state.nodes.forEach((node) => {
+          if (node.type !== "file") return;
+          const cached = state.fileContents[node.id];
+          if (cached !== undefined && cached !== node.content) {
+            dirtyFileIds.add(node.id);
+          }
+        });
+
         state.status = "succeeded";
         state.nodes = action.payload;
         const nodeIds = new Set(action.payload.map((node) => node.id));
@@ -527,12 +587,33 @@ const nodesSlice = createSlice({
           setActiveTab(state, state.editorTabOrder[0] || null);
         }
         syncOpenFiles(state);
-        // Pre-cache content for all files
+        // Pre-cache content for all files, preserving unsaved local edits
+        let preservedCount = 0;
         action.payload.forEach((node) => {
           if (node.type === "file") {
-            state.fileContents[node.id] = node.content || "";
+            if (dirtyFileIds.has(node.id)) {
+              preservedCount += 1;
+            } else {
+              state.fileContents[node.id] = node.content || "";
+            }
           }
         });
+        // #region agent log
+        if (typeof fetch !== "undefined" && (preservedCount > 0 || dirtyFileIds.size > 0)) {
+          fetch("http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f3af79" },
+            body: JSON.stringify({
+              sessionId: "f3af79",
+              hypothesisId: "B",
+              location: "NodesSlice.js:fetchNodes.fulfilled",
+              message: "fetchNodes content cache update",
+              data: { dirtyCount: dirtyFileIds.size, preservedCount },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+        }
+        // #endregion
         Object.keys(state.fileContents).forEach((fileId) => {
           if (!nodeIds.has(fileId)) {
             delete state.fileContents[fileId];
@@ -614,6 +695,9 @@ export const {
   closeAllFiles,
   resetWorkspace,
   updateLocalContent,
+  requestEditorSaveCancel,
+  requestEditorSaveFlush,
+  invalidateLocalFileContents,
   updateRemoteCursor,
   removeRemoteCursor,
   clearRemoteCursorsForFile,

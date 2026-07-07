@@ -17,11 +17,6 @@ const GlobalLoader = dynamic(() => import("@/components/ui/GlobalLoader"), {
   loading: () => null
 });
 
-// Simple fallback component for provider errors
-function ProviderErrorFallback() {
-  return <>{children}</>;
-}
-
 export default function Providers({ children }) {
   return (
     <Provider store={store}>

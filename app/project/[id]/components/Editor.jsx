@@ -118,6 +118,8 @@ const MonacoEditor = () => {
 
   const activeEditorTabId = useSelector((state) => state.nodes.activeEditorTabId);
   const activeFileId = useSelector((state) => state.nodes.activeFileId);
+  const editorSaveCancelToken = useSelector((state) => state.nodes.editorSaveCancelToken);
+  const editorSaveFlushToken = useSelector((state) => state.nodes.editorSaveFlushToken);
   const gitDiffTabsById = useSelector((state) => state.nodes.gitDiffTabsById);
   const nodes = useSelector((state) => state.nodes.nodes);
   const fileContents = useSelector((state) => state.nodes.fileContents);
@@ -293,6 +295,21 @@ const MonacoEditor = () => {
     debounce(async (nodeId, content) => {
       if (!permissions.canEdit) return;
 
+      // #region agent log
+      fetch("http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f3af79" },
+        body: JSON.stringify({
+          sessionId: "f3af79",
+          hypothesisId: "A",
+          location: "Editor.jsx:debouncedSave",
+          message: "debounced save executing",
+          data: { nodeId, contentLength: content?.length ?? 0 },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+
       try {
         // Update in database (also syncs worktree via nodes PATCH)
         const saveTask = dispatch(updateFileContent({ nodeId, content, projectId }));
@@ -392,10 +409,54 @@ const MonacoEditor = () => {
 
   useEffect(() => {
     return () => {
+      // #region agent log
+      fetch("http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f3af79" },
+        body: JSON.stringify({
+          sessionId: "f3af79",
+          hypothesisId: "C",
+          location: "Editor.jsx:tab-flush",
+          message: "flushing pending saves on tab change",
+          data: { activeEditorTabId },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       debouncedSave.flush();
       debouncedDiffSave.flush();
     };
-  }, [activeFileId, debouncedSave, debouncedDiffSave]);
+  }, [activeEditorTabId, debouncedSave, debouncedDiffSave]);
+
+  const editorSaveCancelTokenRef = useRef(editorSaveCancelToken);
+  useEffect(() => {
+    if (editorSaveCancelTokenRef.current === editorSaveCancelToken) return;
+    editorSaveCancelTokenRef.current = editorSaveCancelToken;
+    debouncedSave.cancel();
+    debouncedDiffSave.cancel();
+    // #region agent log
+    fetch("http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f3af79" },
+      body: JSON.stringify({
+        sessionId: "f3af79",
+        hypothesisId: "A",
+        location: "Editor.jsx:save-cancel-token",
+        message: "cancelled pending saves",
+        data: { editorSaveCancelToken },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+  }, [editorSaveCancelToken, debouncedSave, debouncedDiffSave]);
+
+  const editorSaveFlushTokenRef = useRef(editorSaveFlushToken);
+  useEffect(() => {
+    if (editorSaveFlushTokenRef.current === editorSaveFlushToken) return;
+    editorSaveFlushTokenRef.current = editorSaveFlushToken;
+    debouncedSave.flush();
+    debouncedDiffSave.flush();
+  }, [editorSaveFlushToken, debouncedSave, debouncedDiffSave]);
 
   const handleGitDiffModifiedChange = (value) => {
     if (!activeEditorTabId || !permissions.canEdit || !isGitDiffActive || !activeGitDiffTab) return;
@@ -868,6 +929,7 @@ const MonacoEditor = () => {
           filePath={activeGitDiffTab.filePath}
           original={activeGitDiffTab.original}
           modified={activeGitDiffTab.modified}
+          contentRevision={activeGitDiffTab.contentRevision ?? 0}
           readOnly={isReadOnly}
           onModifiedChange={handleGitDiffModifiedChange}
         />

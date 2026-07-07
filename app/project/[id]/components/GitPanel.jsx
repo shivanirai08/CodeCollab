@@ -22,6 +22,9 @@ import {
   setActiveFile,
   updateLocalContent,
   closeAllFiles,
+  requestEditorSaveCancel,
+  requestEditorSaveFlush,
+  invalidateLocalFileContents,
 } from "@/store/NodesSlice";
 import GitSourceControlList from "./GitSourceControlList";
 import {
@@ -338,6 +341,11 @@ export default function GitPanel({
     refreshNodes = false,
   }) => {
     setWorkingTreeActionKey(actionKey);
+    if (endpoint === "discard") {
+      dispatch(requestEditorSaveCancel());
+    } else if (endpoint === "stage" || endpoint === "unstage") {
+      dispatch(requestEditorSaveFlush());
+    }
     try {
       const response = await fetch(`/api/project/${projectId}/git/${endpoint}`, {
         method: "POST",
@@ -358,6 +366,14 @@ export default function GitPanel({
         await dispatch(fetchGitStatus({ projectId, silent: true }));
       }
 
+      if (endpoint === "discard") {
+        if (body.discardAll) {
+          dispatch(invalidateLocalFileContents({ all: true }));
+        } else if (Array.isArray(body.paths) && body.paths.length > 0) {
+          dispatch(invalidateLocalFileContents({ paths: body.paths }));
+        }
+      }
+
       if (refreshNodes) {
         await dispatch(fetchNodes(projectId));
       }
@@ -370,6 +386,9 @@ export default function GitPanel({
 
   const runAction = async (action, endpoint, body = {}) => {
     setActionLoading(action);
+    if (endpoint === "pull" || endpoint === "checkout" || endpoint === "create-branch") {
+      dispatch(requestEditorSaveCancel());
+    }
     try {
       const response = await fetch(`/api/project/${projectId}/git/${endpoint}`, {
         method: "POST",

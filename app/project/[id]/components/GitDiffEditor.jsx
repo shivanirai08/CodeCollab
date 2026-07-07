@@ -109,6 +109,7 @@ export default function GitDiffEditor({
   filePath,
   original,
   modified,
+  contentRevision = 0,
   readOnly = false,
   onModifiedChange,
 }) {
@@ -124,7 +125,7 @@ export default function GitDiffEditor({
 
   useEffect(() => {
     setEditorModified(modified);
-  }, [filePath, original]);
+  }, [filePath, original, contentRevision]);
 
   useEffect(() => {
     ensureDiffEditorStyles();
