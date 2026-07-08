@@ -13,8 +13,8 @@ import NotificationBell from "@/components/ui/NotificationBell";
 import { toast } from "sonner";
 import CreateBranchDialog from "@/components/ui/CreateBranchDialog";
 import { fetchProject, fetchGitStatus } from "@/store/ProjectSlice";
-import { fetchNodes, closeAllFiles } from "@/store/NodesSlice";
-import { isRepositoryUnavailableIssue } from "@/lib/gitActionErrors";
+import { fetchNodes, closeAllFiles, requestEditorSaveCancel, requestEditorSaveFlush } from "@/store/NodesSlice";
+import { isRepositoryUnavailableIssue, normalizeGitActionError } from "@/lib/gitActionErrors";
 import {
   GitBranch,
   Github,
@@ -135,6 +135,7 @@ export default function TopBar({
     }
 
     setIsBranchSwitching(true);
+    dispatch(requestEditorSaveFlush());
     try {
       const res = await fetch(`/api/project/${projectId}/git/checkout`, {
         method: "POST",
@@ -145,7 +146,8 @@ export default function TopBar({
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Failed to checkout branch");
+        const issue = normalizeGitActionError(data, "checkout");
+        throw new Error(issue.error);
       }
 
       const {
@@ -164,6 +166,7 @@ export default function TopBar({
           : `Switched to branch "${data.branch || branch}"`
       );
 
+      dispatch(requestEditorSaveCancel());
       dispatch(closeAllFiles());
       await dispatch(fetchProject(projectId));
       await dispatch(fetchGitStatus(projectId));
@@ -171,7 +174,11 @@ export default function TopBar({
 
       setIsBranchMenuOpen(false);
     } catch (error) {
-      toast.error(error.message || "Failed to checkout branch");
+      const issue = normalizeGitActionError(
+        { error: error.message },
+        "checkout"
+      );
+      toast.error(issue.title, { description: issue.error });
     } finally {
       setIsBranchSwitching(false);
     }
@@ -205,6 +212,7 @@ export default function TopBar({
     }
 
     toast.success(message);
+    dispatch(requestEditorSaveCancel());
     dispatch(closeAllFiles());
     await dispatch(fetchProject(projectId));
     await dispatch(fetchGitStatus(projectId));

@@ -209,8 +209,16 @@ export const useCollaborativeEditing = (projectId, fileId, options = {}) => {
 
     unsubscribeRef.current = unsubscribe;
 
-    // Cleanup: Unsubscribe and cancel pending debounced operations
+    // Cleanup: notify collaborators, unsubscribe, and cancel pending debounced operations
     return () => {
+      if (realtimeService.current && projectId && fileId && currentUser.id) {
+        realtimeService.current.broadcastUserLeaveFile(projectId, fileId, {
+          userId: currentUser.id,
+          username: currentUser.username,
+          timestamp: Date.now(),
+        });
+      }
+
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;

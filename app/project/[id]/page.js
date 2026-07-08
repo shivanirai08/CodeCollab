@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchProject, memberProject, clearProject, fetchGitStatus } from "@/store/ProjectSlice";
-import { fetchNodes, resetWorkspace } from "@/store/NodesSlice";
+import { fetchNodes, resetWorkspace, requestEditorSaveFlush } from "@/store/NodesSlice";
 import { fetchUserInfo } from "@/store/UserSlice";
 import { Terminal } from "lucide-react";
 import { HiEye } from "react-icons/hi";
@@ -196,6 +196,7 @@ export default function ProjectWorkspacePage() {
     return () => {
       cancelled = true;
       setRealtimeEnabled(false);
+      dispatch(requestEditorSaveFlush());
       dispatch(clearProject());
       dispatch(resetWorkspace());
     };

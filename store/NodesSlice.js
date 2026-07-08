@@ -503,27 +503,6 @@ const nodesSlice = createSlice({
           if (!hasLocalChanges) {
             state.fileContents[updatedNode.id] = updatedNode.content;
           }
-          // #region agent log
-          if (typeof fetch !== "undefined") {
-            fetch("http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f3af79" },
-              body: JSON.stringify({
-                sessionId: "f3af79",
-                hypothesisId: "D",
-                location: "NodesSlice.js:handleRemoteNodeUpdate",
-                message: "remote node content sync",
-                data: {
-                  nodeId: updatedNode.id,
-                  hasLocalChanges,
-                  preserved: hasLocalChanges,
-                  isActiveFile: state.activeFileId === updatedNode.id,
-                },
-                timestamp: Date.now(),
-              }),
-            }).catch(() => {});
-          }
-          // #endregion
         }
       }
     },
@@ -588,32 +567,13 @@ const nodesSlice = createSlice({
         }
         syncOpenFiles(state);
         // Pre-cache content for all files, preserving unsaved local edits
-        let preservedCount = 0;
         action.payload.forEach((node) => {
           if (node.type === "file") {
-            if (dirtyFileIds.has(node.id)) {
-              preservedCount += 1;
-            } else {
+            if (!dirtyFileIds.has(node.id)) {
               state.fileContents[node.id] = node.content || "";
             }
           }
         });
-        // #region agent log
-        if (typeof fetch !== "undefined" && (preservedCount > 0 || dirtyFileIds.size > 0)) {
-          fetch("http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f3af79" },
-            body: JSON.stringify({
-              sessionId: "f3af79",
-              hypothesisId: "B",
-              location: "NodesSlice.js:fetchNodes.fulfilled",
-              message: "fetchNodes content cache update",
-              data: { dirtyCount: dirtyFileIds.size, preservedCount },
-              timestamp: Date.now(),
-            }),
-          }).catch(() => {});
-        }
-        // #endregion
         Object.keys(state.fileContents).forEach((fileId) => {
           if (!nodeIds.has(fileId)) {
             delete state.fileContents[fileId];
@@ -646,8 +606,13 @@ const nodesSlice = createSlice({
       .addCase(updateNode.fulfilled, (state, action) => {
         const index = state.nodes.findIndex((n) => n.id === action.payload.id);
         if (index !== -1) {
+          const oldNode = state.nodes[index];
+          const cachedContent = state.fileContents[action.payload.id];
+          const hasLocalChanges =
+            cachedContent !== undefined && cachedContent !== oldNode.content;
+
           state.nodes[index] = action.payload;
-          if (action.payload.type === "file") {
+          if (action.payload.type === "file" && !hasLocalChanges) {
             state.fileContents[action.payload.id] = action.payload.content;
           }
         }

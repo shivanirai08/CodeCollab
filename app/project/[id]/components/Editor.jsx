@@ -295,21 +295,6 @@ const MonacoEditor = () => {
     debounce(async (nodeId, content) => {
       if (!permissions.canEdit) return;
 
-      // #region agent log
-      fetch("http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f3af79" },
-        body: JSON.stringify({
-          sessionId: "f3af79",
-          hypothesisId: "A",
-          location: "Editor.jsx:debouncedSave",
-          message: "debounced save executing",
-          data: { nodeId, contentLength: content?.length ?? 0 },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-
       try {
         // Update in database (also syncs worktree via nodes PATCH)
         const saveTask = dispatch(updateFileContent({ nodeId, content, projectId }));
@@ -409,20 +394,6 @@ const MonacoEditor = () => {
 
   useEffect(() => {
     return () => {
-      // #region agent log
-      fetch("http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f3af79" },
-        body: JSON.stringify({
-          sessionId: "f3af79",
-          hypothesisId: "C",
-          location: "Editor.jsx:tab-flush",
-          message: "flushing pending saves on tab change",
-          data: { activeEditorTabId },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       debouncedSave.flush();
       debouncedDiffSave.flush();
     };
@@ -434,20 +405,6 @@ const MonacoEditor = () => {
     editorSaveCancelTokenRef.current = editorSaveCancelToken;
     debouncedSave.cancel();
     debouncedDiffSave.cancel();
-    // #region agent log
-    fetch("http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f3af79" },
-      body: JSON.stringify({
-        sessionId: "f3af79",
-        hypothesisId: "A",
-        location: "Editor.jsx:save-cancel-token",
-        message: "cancelled pending saves",
-        data: { editorSaveCancelToken },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
   }, [editorSaveCancelToken, debouncedSave, debouncedDiffSave]);
 
   const editorSaveFlushTokenRef = useRef(editorSaveFlushToken);

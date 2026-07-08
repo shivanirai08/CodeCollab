@@ -42,13 +42,6 @@ import {
   X,
 } from "lucide-react";
 
-// Color-coded status constants
-const FILE_STATUS_COLORS = {
-  staged: { bg: "#10B981", text: "#DFFCF0", label: "Staged" },
-  unstaged: { bg: "#6B7280", text: "#F3F4F6", label: "Modified" },
-  conflicted: { bg: "#EF4444", text: "#FEE2E2", label: "Conflict" },
-};
-
 const MIN_PANEL_WIDTH = 360;
 const MAX_PANEL_WIDTH = 960;
 
@@ -86,6 +79,57 @@ function buildNodePathIndex(nodes) {
   return index;
 }
 
+function GitIssueAlert({ issue, actionLabel, actionDisabled, onAction, onDismiss }) {
+  const [expanded, setExpanded] = useState(false);
+  const extraText = [issue.hint, issue.details].filter(Boolean).join(" ");
+
+  return (
+    <div className="mt-3 rounded-2xl border border-[#4B242C] bg-[#231216] p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-[#FDE2E4]">{issue.title}</p>
+          <p className="mt-1 text-sm text-[#F6BCC4]">{issue.error}</p>
+          {extraText ? (
+            <>
+              {expanded ? (
+                <p className="mt-2 text-xs leading-5 text-[#E7A1AB]">{extraText}</p>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setExpanded((value) => !value)}
+                className="mt-2 text-xs font-medium text-[#F08A95] hover:text-[#FBCFD6]"
+              >
+                {expanded ? "Show less" : "Show more"}
+              </button>
+            </>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {actionLabel ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 border border-[#6B2F3A] bg-[#30181D] px-3 text-[#FFE2E7] hover:bg-[#3A1D24] hover:text-white"
+              onClick={onAction}
+              disabled={actionDisabled}
+            >
+              {actionLabel}
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 px-2 text-[#D9A7AF] hover:bg-[#30181D] hover:text-white"
+            onClick={onDismiss}
+          >
+            Dismiss
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GitPanel({
   projectId,
   isOpen,
@@ -109,6 +153,7 @@ export default function GitPanel({
   const [panelWidth, setPanelWidth] = useState(520);
   const [isResizing, setIsResizing] = useState(false);
   const panelRef = useRef(null);
+  const changesSectionRef = useRef(null);
   const [githubRepos, setGithubRepos] = useState([]);
   const [githubConnected, setGithubConnected] = useState(false);
   const [isLoadingRepos, setIsLoadingRepos] = useState(false);
@@ -189,6 +234,7 @@ export default function GitPanel({
     }
 
     toast.success(message);
+    dispatch(requestEditorSaveCancel());
     dispatch(closeAllFiles());
     await dispatch(fetchProject(projectId));
     await dispatch(fetchGitStatus(projectId));
@@ -270,6 +316,12 @@ export default function GitPanel({
       return;
     }
 
+    if (issue.suggestedAction === "review-changes" || issue.suggestedAction === "commit") {
+      setGitIssue(null);
+      changesSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
     if (issue.suggestedAction === "pull" && canPull) {
       await runAction("pull", "pull");
       return;
@@ -315,18 +367,10 @@ export default function GitPanel({
       ...normalizeGitActionError(payload, action),
       endpoint: action,
     };
-    const issueActionLabel = getGitSuggestedActionLabel(issue.suggestedAction);
 
     setGitIssue(issue);
-
     toast.error(issue.title, {
-      description: issue.hint ? `${issue.error} ${issue.hint}` : issue.error,
-      action: issueActionLabel
-        ? {
-            label: issueActionLabel,
-            onClick: () => triggerGitIssueAction(issue),
-          }
-        : undefined,
+      description: issue.error,
     });
 
     if (issue.details) {
@@ -387,7 +431,7 @@ export default function GitPanel({
   const runAction = async (action, endpoint, body = {}) => {
     setActionLoading(action);
     if (endpoint === "pull" || endpoint === "checkout" || endpoint === "create-branch") {
-      dispatch(requestEditorSaveCancel());
+      dispatch(requestEditorSaveFlush());
     }
     try {
       const response = await fetch(`/api/project/${projectId}/git/${endpoint}`, {
@@ -417,6 +461,7 @@ export default function GitPanel({
       }
 
       if (endpoint === "pull") {
+        dispatch(requestEditorSaveCancel());
         await dispatch(fetchNodes(projectId));
 
         const {
@@ -431,9 +476,7 @@ export default function GitPanel({
         if (deletedCount > 0) summary.push(`${deletedCount} files removed`);
 
         if (result.pullStatus === "conflicts" || conflictedFiles.length > 0) {
-          toast.error(
-            `Pull stopped with conflicts in ${conflictedFiles.length || "some"} file(s). Open them to resolve.`
-          );
+          toast.error("Pull stopped — resolve conflicts below.");
         } else if (summary.length > 0) {
           toast.success(`Pull complete: ${summary.join(", ")}`);
         } else {
@@ -442,8 +485,17 @@ export default function GitPanel({
       }
 
       if (endpoint === "resolve-conflict") {
+        if (body.filePath) {
+          dispatch(invalidateLocalFileContents({ paths: [body.filePath] }));
+        }
         await dispatch(fetchNodes(projectId));
         toast.success(`Resolved ${body.filePath || "file"}`);
+      }
+
+      if (endpoint === "checkout" || endpoint === "create-branch") {
+        dispatch(requestEditorSaveCancel());
+        dispatch(closeAllFiles());
+        await dispatch(fetchNodes(projectId));
       }
 
       await syncStatus();
@@ -512,10 +564,41 @@ export default function GitPanel({
   };
 
   const resolveConflict = async (filePath, strategy) => {
-    await runAction(`resolve-${strategy}`, "resolve-conflict", {
-      filePath: normalizeNodePath(filePath),
-      strategy,
-    });
+    const normalizedPath = normalizeNodePath(filePath);
+    const actionKey = `resolve-${strategy}:${normalizedPath}`;
+    setActionLoading(actionKey);
+
+    try {
+      const response = await fetch(`/api/project/${projectId}/git/resolve-conflict`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ filePath: normalizedPath, strategy }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        presentGitIssue(result, "resolve-conflict");
+        return;
+      }
+
+      dispatch(invalidateLocalFileContents({ paths: [normalizedPath] }));
+      await dispatch(fetchNodes(projectId));
+
+      const nextStatus = result.status || (await dispatch(fetchGitStatus({ projectId, silent: true })).unwrap().catch(() => null));
+      if (nextStatus) {
+        dispatch(setGitStatus(nextStatus));
+        if (!getConflictFilesFromGitStatus(nextStatus).length) {
+          setGitIssue(null);
+        }
+      }
+
+      toast.success(`Resolved ${normalizedPath.split("/").pop() || normalizedPath}`);
+    } catch (error) {
+      presentGitIssue({ error: error.message || "Failed to resolve conflict" }, "resolve-conflict");
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const handleConnectGitHub = () => {
@@ -791,38 +874,13 @@ export default function GitPanel({
               </div>
 
               {gitIssue ? (
-                <div className="mt-3 rounded-2xl border border-[#4B242C] bg-[#231216] p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-[#FDE2E4]">{gitIssue.title}</p>
-                      <p className="mt-1 text-sm text-[#F6BCC4]">{gitIssue.error}</p>
-                      {gitIssue.hint ? (
-                        <p className="mt-2 text-xs leading-5 text-[#E7A1AB]">{gitIssue.hint}</p>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {gitIssueActionLabel ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 border border-[#6B2F3A] bg-[#30181D] px-3 text-[#FFE2E7] hover:bg-[#3A1D24] hover:text-white"
-                          onClick={() => triggerGitIssueAction(gitIssue)}
-                          disabled={Boolean(actionLoading) || (gitIssue.suggestedAction === "pull" && !canPull)}
-                        >
-                          {gitIssueActionLabel}
-                        </Button>
-                      ) : null}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 px-2 text-[#D9A7AF] hover:bg-[#30181D] hover:text-white"
-                        onClick={() => setGitIssue(null)}
-                      >
-                        Dismiss
-                      </Button>
-                    </div>
-                  </div>
-                </div>
+                <GitIssueAlert
+                  issue={gitIssue}
+                  actionLabel={gitIssueActionLabel}
+                  actionDisabled={Boolean(actionLoading) || (gitIssue.suggestedAction === "pull" && !canPull)}
+                  onAction={() => triggerGitIssueAction(gitIssue)}
+                  onDismiss={() => setGitIssue(null)}
+                />
               ) : null}
             </div>
 
@@ -869,22 +927,10 @@ export default function GitPanel({
                       </span>
                     </div>
                     <div className="mx-3 my-2 rounded-lg border border-[#4B242C] bg-[#1A0C10] px-3 py-2 text-[11px] text-[#E7A1AB]">
-                      Click a file to open it in the editor, or use Keep Ours / Take Theirs.
+                      Open a file to resolve it, or use Keep Ours / Take Theirs.
                     </div>
                     <div className="mt-1">
-                      {conflictFiles.map((file) => {
-                        const conflictLabel = {
-                          "both-modified":   "Both modified",
-                          "both-added":      "Both added",
-                          "both-deleted":    "Both deleted",
-                          "added-by-us":     "Added by us",
-                          "added-by-them":   "Added by them",
-                          "deleted-by-us":   "Deleted by us",
-                          "deleted-by-them": "Deleted by them",
-                          "unmerged":        "Unmerged",
-                        }[file.conflictType] || "Conflict";
-
-                        return (
+                      {conflictFiles.map((file) => (
                         <div
                           key={`conflict-${file.path}`}
                           className="px-3 py-2 text-sm transition-colors hover:bg-[#1F1418]"
@@ -892,15 +938,10 @@ export default function GitPanel({
                           <button
                             type="button"
                             onClick={() => openInEditor(file.path)}
-                            className="flex w-full cursor-pointer items-center justify-between"
+                            className="flex w-full cursor-pointer items-center gap-2"
                           >
-                            <span className="flex min-w-0 items-center gap-2">
-                              <span className="text-[#FB7185]">!</span>
-                              <span className="truncate text-[#F9CFD6]">{file.path}</span>
-                            </span>
-                            <span className="shrink-0 rounded px-2 py-0.5 text-[10px] font-medium" style={{ backgroundColor: FILE_STATUS_COLORS.conflicted.bg, color: FILE_STATUS_COLORS.conflicted.text }}>
-                              {conflictLabel}
-                            </span>
+                            <span className="text-[#FB7185]">!</span>
+                            <span className="truncate text-[#F9CFD6]">{file.path}</span>
                           </button>
                           {permissions.canEdit ? (
                             <div className="mt-2 flex flex-wrap gap-2">
@@ -931,12 +972,12 @@ export default function GitPanel({
                             </div>
                           ) : null}
                         </div>
-                        );
-                      })}
+                      ))}
                     </div>
                   </>
                 ) : null}
 
+                <div ref={changesSectionRef}>
                 <GitSourceControlList
                   stagedFiles={stagedFiles}
                   unstagedFiles={unstagedFiles}
@@ -996,6 +1037,7 @@ export default function GitPanel({
                     })
                   }
                 />
+                </div>
             </div>
             </div>
           </>
