@@ -211,7 +211,7 @@ export const updateFileContent = createAsyncThunk(
       
       const data = await res.json();
       if (projectId) {
-        dispatch(fetchGitStatus(projectId));
+        dispatch(fetchGitStatus({ projectId, silent: true }));
       }
       return { nodeId, content: data.node.content };
     } catch (error) {
@@ -629,6 +629,9 @@ const nodesSlice = createSlice({
         if (node) {
           node.content = content;
         }
+      })
+      .addCase(updateFileContent.rejected, (state, action) => {
+        state.error = action.payload;
       })
       // Delete node
       .addCase(deleteNode.fulfilled, (state, action) => {

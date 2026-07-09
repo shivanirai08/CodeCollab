@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useCallback, useMemo, useState } from "react"
 import Editor, { useMonaco } from "@monaco-editor/react";
 import GitDiffEditor from "./GitDiffEditor";
 import { useSelector, useDispatch } from "react-redux";
-import { updateLocalContent, updateFileContent, updateGitDiffTabModified, updateRemoteCursor, removeRemoteCursor, clearRemoteCursorsForFile, lockLine, unlockLine, unlockUserLines, clearLockedLinesForFile } from "@/store/NodesSlice";
+import { updateLocalContent, updateFileContent, updateGitDiffTabModified, updateRemoteCursor, removeRemoteCursor, clearRemoteCursorsForFile, lockLine, unlockLine, unlockUserLines, clearLockedLinesForFile, invalidateLocalFileContents, fetchNodes } from "@/store/NodesSlice";
 import { isGitDiffTabId } from "@/lib/editorTabs";
 import { debounce } from "lodash";
 import { toast } from "sonner";
@@ -100,6 +100,7 @@ const MonacoEditor = () => {
   const params = useParams();
   const projectId = params.id;
   const [versionCounter, setVersionCounter] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
   const [conflictBlockCount, setConflictBlockCount] = useState(0);
   const [isStagingResolution, setIsStagingResolution] = useState(false);
   const currentLockedLineRef = useRef(null);
@@ -287,56 +288,18 @@ const MonacoEditor = () => {
 
   const { broadcastContentChange, broadcastCursorPosition, broadcastLineLock, broadcastLineUnlock, isApplyingRemoteChange } = collaborativeEditing;
 
-  const nodesRef = useRef(nodes);
-  nodesRef.current = nodes;
-
-  // Debounced save to database AND disk (autosave)
+  // Debounced save to database (also syncs worktree via nodes PATCH)
   const debouncedSave = useCallback(
     debounce(async (nodeId, content) => {
       if (!permissions.canEdit) return;
 
+      setIsSaving(true);
       try {
-        // Update in database (also syncs worktree via nodes PATCH)
-        const saveTask = dispatch(updateFileContent({ nodeId, content, projectId }));
-
-        const nodeMap = new Map(nodesRef.current.map((n) => [n.id, n]));
-        const resolveRelativePath = (id) => {
-          const segments = [];
-          let cur = nodeMap.get(id);
-          while (cur) {
-            segments.unshift(cur.name);
-            cur = cur.parent_id ? nodeMap.get(cur.parent_id) : null;
-          }
-          return segments.join("/");
-        };
-
-        const relativePath = resolveRelativePath(nodeId);
-        if (relativePath) {
-          const diskResponse = await fetch(`/api/project/${projectId}/file`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "same-origin",
-            body: JSON.stringify({ filePath: relativePath, content }),
-          });
-
-          if (!diskResponse.ok) {
-            const diskResult = await diskResponse.json().catch(() => ({}));
-            console.warn("Autosave to disk failed:", diskResult.error || diskResponse.statusText);
-          } else {
-            dispatch(fetchGitStatus({ projectId, silent: true }));
-          }
-        }
-
-        const saveResult = await saveTask.unwrap().catch((error) => {
-          toast.error(error || "Failed to save file");
-          throw error;
-        });
-
-        void saveResult;
+        await dispatch(updateFileContent({ nodeId, content, projectId })).unwrap();
       } catch (error) {
-        if (!error?.message && typeof error !== "string") {
-          console.error("Failed to save file:", error);
-        }
+        toast.error(error || "Failed to save file");
+      } finally {
+        setIsSaving(false);
       }
     }, 2000),
     [dispatch, permissions.canEdit, projectId]
@@ -427,16 +390,6 @@ const MonacoEditor = () => {
       toast.error("You don't have permission to edit this file");
     }
   };
-
-  // Cancel debounced handlers only on unmount
-  useEffect(() => {
-    const save = debouncedSave;
-    const diffSave = debouncedDiffSave;
-    return () => {
-      save.cancel();
-      diffSave.cancel();
-    };
-  }, [debouncedSave, debouncedDiffSave]);
 
   // Clear remote cursors and locked lines when switching files
   useEffect(() => {
@@ -835,6 +788,8 @@ const MonacoEditor = () => {
       }
 
       await dispatch(fetchGitStatus(projectId));
+      dispatch(invalidateLocalFileContents({ paths: [activeFilePath] }));
+      await dispatch(fetchNodes(projectId));
       toast.success(`${activeFilePath} resolved and staged`);
     } catch (error) {
       toast.error(error.message || "Failed to stage resolved file");
@@ -969,14 +924,11 @@ const MonacoEditor = () => {
       />
 
       {/* Save indicator */}
-      {permissions.canEdit && (
-        <div
-          className="absolute top-2 right-2 text-xs text-[#8D8D98] bg-[#1A1A20] px-2 py-1 rounded opacity-0 transition-opacity"
-          id="save-indicator"
-        >
+      {permissions.canEdit && isSaving ? (
+        <div className="absolute top-2 right-2 rounded bg-[#1A1A20] px-2 py-1 text-xs text-[#8D8D98]">
           Saving...
         </div>
-      )}
+      ) : null}
 
       {/* Remote cursors indicator */}
       {Object.keys(remoteCursors).length > 0 && (

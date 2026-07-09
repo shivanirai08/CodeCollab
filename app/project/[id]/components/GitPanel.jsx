@@ -567,6 +567,7 @@ export default function GitPanel({
     const normalizedPath = normalizeNodePath(filePath);
     const actionKey = `resolve-${strategy}:${normalizedPath}`;
     setActionLoading(actionKey);
+    dispatch(requestEditorSaveCancel());
 
     try {
       const response = await fetch(`/api/project/${projectId}/git/resolve-conflict`, {
