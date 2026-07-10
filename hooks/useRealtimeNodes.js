@@ -7,6 +7,7 @@ import {
   handleRemoteNodeDelete,
 } from '@/store/NodesSlice';
 import { fetchGitStatus } from '@/store/ProjectSlice';
+import store from '@/store/store';
 
 /**
  * Custom hook for real-time file/folder structure synchronization
@@ -58,8 +59,15 @@ export const useRealtimeNodes = (projectId, enabled = true, currentUserId = null
       },
 
       onUpdate: (updatedNode, oldNode) => {
-        // Update Redux store with modified node (rename or content change)
         dispatch(handleRemoteNodeUpdate(updatedNode));
+
+        if (updatedNode.type === "file") {
+          const cached = store.getState().nodes.fileContents[updatedNode.id];
+          if (cached !== undefined && cached !== updatedNode.content) {
+            return;
+          }
+        }
+
         scheduleGitStatusRefresh();
       },
 

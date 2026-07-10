@@ -13,8 +13,9 @@ import NotificationBell from "@/components/ui/NotificationBell";
 import { toast } from "sonner";
 import CreateBranchDialog from "@/components/ui/CreateBranchDialog";
 import { fetchProject, fetchGitStatus } from "@/store/ProjectSlice";
-import { fetchNodes, closeAllFiles, requestEditorSaveCancel, requestEditorSaveFlush } from "@/store/NodesSlice";
+import { fetchNodes, closeAllFiles, requestEditorSaveCancel } from "@/store/NodesSlice";
 import { isRepositoryUnavailableIssue, normalizeGitActionError } from "@/lib/gitActionErrors";
+import { flushEditorSave } from "@/lib/editorSaveCoordinator";
 import {
   GitBranch,
   Github,
@@ -135,8 +136,8 @@ export default function TopBar({
     }
 
     setIsBranchSwitching(true);
-    dispatch(requestEditorSaveFlush());
     try {
+      await flushEditorSave();
       const res = await fetch(`/api/project/${projectId}/git/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

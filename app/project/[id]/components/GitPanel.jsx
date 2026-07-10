@@ -15,6 +15,7 @@ import {
   getConflictFilesFromGitStatus,
   normalizeGitNodePath,
 } from "@/lib/gitStatus";
+import { flushEditorSave } from "@/lib/editorSaveCoordinator";
 import { fetchGitStatus, fetchProject, setGitStatus } from "@/store/ProjectSlice";
 import {
   fetchNodes,
@@ -23,7 +24,6 @@ import {
   updateLocalContent,
   closeAllFiles,
   requestEditorSaveCancel,
-  requestEditorSaveFlush,
   invalidateLocalFileContents,
 } from "@/store/NodesSlice";
 import GitSourceControlList from "./GitSourceControlList";
@@ -388,7 +388,7 @@ export default function GitPanel({
     if (endpoint === "discard") {
       dispatch(requestEditorSaveCancel());
     } else if (endpoint === "stage" || endpoint === "unstage") {
-      dispatch(requestEditorSaveFlush());
+      await flushEditorSave();
     }
     try {
       const response = await fetch(`/api/project/${projectId}/git/${endpoint}`, {
@@ -431,7 +431,7 @@ export default function GitPanel({
   const runAction = async (action, endpoint, body = {}) => {
     setActionLoading(action);
     if (endpoint === "pull" || endpoint === "checkout" || endpoint === "create-branch") {
-      dispatch(requestEditorSaveFlush());
+      await flushEditorSave();
     }
     try {
       const response = await fetch(`/api/project/${projectId}/git/${endpoint}`, {

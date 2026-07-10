@@ -14,6 +14,7 @@ import useLineLocks from "@/hooks/useLineLocks";
 import { useParams } from "next/navigation";
 import { fetchGitStatus } from "@/store/ProjectSlice";
 import { isPathConflicted } from "@/lib/gitStatus";
+import { registerEditorSaveFlush, unregisterEditorSaveFlush } from "@/lib/editorSaveCoordinator";
 
 function resolveNodePath(nodes, nodeId) {
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
@@ -308,13 +309,18 @@ const MonacoEditor = () => {
   const handleEditorChange = (value) => {
     if (!activeFileId || !permissions.canEdit) return;
 
-    // Don't broadcast if we're applying a remote change
-    if (isApplyingRemoteChange() || isLocalChangeRef.current === false) {
-      isLocalChangeRef.current = true; // Reset flag
+    if (isApplyingRemoteChange()) {
+      isLocalChangeRef.current = true;
       return;
     }
 
-    // Mark as local change
+    if (isLocalChangeRef.current === false) {
+      isLocalChangeRef.current = true;
+      if (value === currentContentRef.current) {
+        return;
+      }
+    }
+
     isLocalChangeRef.current = true;
     currentContentRef.current = value;
 
@@ -382,8 +388,22 @@ const MonacoEditor = () => {
     if (!activeEditorTabId || !permissions.canEdit || !isGitDiffActive || !activeGitDiffTab) return;
 
     dispatch(updateGitDiffTabModified({ tabId: activeEditorTabId, modified: value }));
+    if (activeGitDiffTab.nodeId) {
+      dispatch(updateLocalContent({ nodeId: activeGitDiffTab.nodeId, content: value }));
+    }
     debouncedDiffSave(activeGitDiffTab.filePath, value);
   };
+
+  useEffect(() => {
+    registerEditorSaveFlush(async () => {
+      await Promise.all([
+        Promise.resolve(debouncedSave.flush()),
+        Promise.resolve(debouncedDiffSave.flush()),
+      ]);
+    });
+
+    return unregisterEditorSaveFlush;
+  }, [debouncedSave, debouncedDiffSave]);
 
   const handleReadOnlyAttempt = () => {
     if (isReadOnly) {

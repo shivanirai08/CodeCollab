@@ -498,7 +498,9 @@ const nodesSlice = createSlice({
 
         // Update file content cache if it's a file and content changed
         if (updatedNode.type === "file") {
-          const hasLocalChanges = state.fileContents[updatedNode.id] !== oldNode.content;
+          const cachedContent = state.fileContents[updatedNode.id];
+          const hasLocalChanges =
+            cachedContent !== undefined && cachedContent !== updatedNode.content;
 
           if (!hasLocalChanges) {
             state.fileContents[updatedNode.id] = updatedNode.content;
@@ -595,8 +597,13 @@ const nodesSlice = createSlice({
         state.error = null;
       })
       .addCase(createNode.fulfilled, (state, action) => {
-        // Node will be added via real-time subscription (handleRemoteNodeInsert)
-        // This prevents duplicate nodes from being created
+        const newNode = action.payload;
+        if (newNode && !state.nodes.some((n) => n.id === newNode.id)) {
+          state.nodes.push(newNode);
+          if (newNode.type === "file") {
+            state.fileContents[newNode.id] = newNode.content || "";
+          }
+        }
         state.error = null;
       })
       .addCase(createNode.rejected, (state, action) => {

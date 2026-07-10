@@ -7,8 +7,8 @@ import {
   setActiveEditorTab,
   closeEditorTab,
   closeFile,
-  requestEditorSaveFlush,
 } from "@/store/NodesSlice";
+import { flushEditorSave } from "@/lib/editorSaveCoordinator";
 import { isGitDiffTabId } from "@/lib/editorTabs";
 import { AlertCircle, AlertTriangle } from "lucide-react";
 
@@ -24,9 +24,9 @@ export default function EditorTabs({ onOpenProblems }) {
     return <></>;
   }
 
-  const handleCloseTab = (e, tabId) => {
+  const handleCloseTab = async (e, tabId) => {
     e.stopPropagation();
-    dispatch(requestEditorSaveFlush());
+    await flushEditorSave();
     if (isGitDiffTabId(tabId)) {
       dispatch(closeEditorTab(tabId));
       return;
