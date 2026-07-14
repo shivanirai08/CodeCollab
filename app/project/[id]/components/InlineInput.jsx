@@ -72,6 +72,10 @@ export default function InlineInput({ type, onSubmit, onCancel, initialValue }) 
     e?.preventDefault();
     e?.stopPropagation();
 
+    // #region agent log
+    fetch('http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae4fb6'},body:JSON.stringify({sessionId:'ae4fb6',runId:'pre-fix',hypothesisId:'A',location:'InlineInput.jsx:handleSubmit',message:'handleSubmit entered',data:{type,value,isSubmitting,eventType:e?.type||'none'},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     const trimmedValue = value.trim();
     if (!trimmedValue) {
         setError("Name cannot be empty")
@@ -91,6 +95,9 @@ export default function InlineInput({ type, onSubmit, onCancel, initialValue }) 
 
     if (trimmedValue) {
       setIsSubmitting(true);
+      // #region agent log
+      fetch('http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae4fb6'},body:JSON.stringify({sessionId:'ae4fb6',runId:'pre-fix',hypothesisId:'A',location:'InlineInput.jsx:onSubmit',message:'calling onSubmit',data:{type,trimmedValue},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       try {
         await onSubmit(trimmedValue);
       } finally {
@@ -125,6 +132,10 @@ export default function InlineInput({ type, onSubmit, onCancel, initialValue }) 
   }
 
   const handleBlur = () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae4fb6'},body:JSON.stringify({sessionId:'ae4fb6',runId:'pre-fix',hypothesisId:'A',location:'InlineInput.jsx:handleBlur',message:'blur fired',data:{type,value,isSubmitting},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     if (isSubmitting) {
       return;
     }
@@ -150,6 +161,9 @@ export default function InlineInput({ type, onSubmit, onCancel, initialValue }) 
 
     // Small delay to allow click events to register
     setTimeout(() => {
+      // #region agent log
+      fetch('http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae4fb6'},body:JSON.stringify({sessionId:'ae4fb6',runId:'pre-fix',hypothesisId:'A',location:'InlineInput.jsx:blurTimeout',message:'blur timeout evaluating submit',data:{type,value,isSubmittingStale:isSubmitting},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const trimmedValue = value.trim();
       if (trimmedValue && !isSubmitting) {
         handleSubmit();

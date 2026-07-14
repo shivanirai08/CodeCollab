@@ -231,6 +231,10 @@ export default function TerminalPanel({
     const language = getLanguageFromFileName(activeFile.name);
     setIsExecuting(true);
 
+    // #region agent log
+    fetch('http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae4fb6'},body:JSON.stringify({sessionId:'ae4fb6',runId:'pre-fix',hypothesisId:'B',location:'Terminal.jsx:execute',message:'Mapped file extension to language',data:{fileName:activeFile.name,language},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     // Add execution start message
     setOutput((prev) => [
       ...prev,

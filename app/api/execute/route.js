@@ -86,8 +86,33 @@ export async function POST(req) {
       );
     }
 
+    const languageKey = language?.toLowerCase();
     const languageId =
-      LANGUAGE_IDS[language?.toLowerCase()] || LANGUAGE_IDS.javascript;
+      LANGUAGE_IDS[languageKey] || LANGUAGE_IDS.javascript;
+
+    // #region agent log
+    fetch("http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "ae4fb6",
+      },
+      body: JSON.stringify({
+        sessionId: "ae4fb6",
+        runId: "pre-fix",
+        hypothesisId: "B",
+        location: "execute/route.js:language-resolve",
+        message: "Resolved Judge0 language id",
+        data: {
+          requestedLanguage: languageKey,
+          known: Boolean(LANGUAGE_IDS[languageKey]),
+          languageId,
+          fellBackToJs: !LANGUAGE_IDS[languageKey],
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
 
     // Encode source code and stdin to base64
     const encodedSourceCode = encodeBase64(sourceCode);

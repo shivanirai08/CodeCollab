@@ -112,6 +112,10 @@ export default function FileSidebar({ className, mobileOpen, onClose, desktopWid
    * Infers language based on file extension for syntax highlighting
    */
   const handleCreateNode = async (name) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7791/ingest/772f312a-003d-4c15-b14f-f4866f57196a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae4fb6'},body:JSON.stringify({sessionId:'ae4fb6',runId:'pre-fix',hypothesisId:'A',location:'FileSidebar.jsx:handleCreateNode',message:'createNode invoked',data:{name,creatingType:creatingNode?.type,parentId:creatingNode?.parentId},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     if (!name || !creatingNode) {
       return;
     }
